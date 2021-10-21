@@ -1,0 +1,15 @@
+{
+  "_comment" : "config for default metric item",
+  "GlobalManager":{
+    "_comment" : "global config for metric manager",
+    "max_threads" : 5,
+    "max_retry_times" : 5,
+    "pusher" : {
+      "method" : "nokeep",
+      "protocal" : "http",
+      "base_url" : "http://10.185.180.235:8090/metricdata/",
+      "interval" : 10,
+      "cluster_name" : "cluster2"
+    }
+  }
+}

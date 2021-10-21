@@ -1,0 +1,83 @@
+{
+  "_comment" : "config for default metric item, DON'T change this file if not needed ",
+  "active_query_count"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 5,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "coordinator",
+      "query_database" : "ALL",
+      "query_string": "cn_get_concurrency_enqueue.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_concurrency_enqueue_t",
+      "define":{
+        "usename":"text",
+        "datname":"text",
+        "coorname":"text",
+        "enqueue":"text",
+        "count":"bigint"
+      }
+    }
+  },
+  "system_load_average"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 10,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "sar",
+      "option" : " -q 1 5",
+      "formation" : "grep Average | awk '{$1=\"\";print $0}' | sed 's/[ ][ ]*/|/g' | sed 's/^|//g' | sed 's/|$//g'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_load_average_t",
+      "define":{
+        "runqsz":"int",
+        "plistsz":"int",
+        "ldavg1":"float",
+        "ldavg5":"float",
+        "ldavg15":"float",
+        "blocked" : "int"
+      }
+    }
+  },
+  "system_cpu_usage"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 10,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "sar",
+      "option" : " -u 1 5",
+      "formation" : "grep Average | awk '{$1=\"\";$2=\"\";print $0}' | sed 's/[ ][ ]*/|/g' | sed 's/^|//g' | sed 's/|$//g'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_cpu_usage_t",
+      "define":{
+        "cur_user" : "float",
+        "nice"    :   "float",
+        "system"   :   "float",
+        "iowait"   :   "float",
+        "steal"    :   "float",
+        "idle"     :   "float"
+      }
+    }
+  }
+}
