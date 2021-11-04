@@ -63,7 +63,7 @@ METRIC_LOGFILE_FORMAT = FILE_TIME_FORMAT + ".log"
 RECORD_BEGIN_DELIMITER = "--[RECORD]" + "-" * 90
 DATA_TYPE_DELIMITER = "-" * 50
 RECORD_TIMELABEL_FORMAT = "%Y-%m-%d %H:%M:%S"
-LABEL_HEAD_PREFIX = "GS_LABEL_HEAD"
+LABEL_HEAD_PREFIX = "gs_label_head"
 
 # Invariant
 
@@ -88,4 +88,4 @@ METRIC_DATA_BASE_DIR = os.path.join(MATRIC_LOGBASE, "data")
 PUSHER_BUFFER_PATH = os.path.join(MATRIC_LOGBASE, "pusherbuffer")
 METRIC_RUNNING_LOG = os.path.join(MATRIC_LOGBASE, "runlog")
 TABLE_MAP_FILE = "tablemap.json"
-CLUSTER_LIST_FILE = "cluster_list.json"
+HOST_LIST_FILE = "host_list.json"
