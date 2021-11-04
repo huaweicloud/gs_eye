@@ -215,8 +215,7 @@ class DatabaseMetricItem(MetricItem):
             # Use copy to wrap the SQL to get the formatted data
             elif query.lower().startswith("select"):
                 sql += ("copy (%s) to stdout delimiter '|';\n" %
-                        query.lower().replace("select", "select \'%s|\'||" % (
-                        varinfo.LABEL_HEAD_PREFIX), 1))
+                        ("select 'GS_LABEL_HEAD' , * from (" + query + ") tmp"))
             # Prevent command injection for abnormal sql
             else:
                 logmgr.recordError(LOG_MODULE, "Invalid sql in file %s query %s" % (self.tempfile, query), "PANIC")
@@ -342,6 +341,7 @@ class MetricManager():
         self.clockcount = 0
         self.stopflag = 0
         self.itemRefreshflag = 1
+        self.pushConfigFlag = 1
         self.itemDirList = itemDirList
         self.itemList = []
         self.itemListDict = {}
@@ -368,17 +368,32 @@ class MetricManager():
         return self.clockcount
 
     def initMetricItem(self, itemClass, metriclist):
+        metricNameList = map(lambda metricItem: metricItem.name, self.itemList)
         for itemdict in metriclist.keys():
-            if MetricMethod(metriclist[itemdict]['type']) == MetricMethod('query'):
+            item = metriclist[itemdict]
+            if itemdict in metricNameList:
+                continue
+            if MetricMethod(item['type']) == MetricMethod('query'):
                 for inst in self.instanceList:
-                    self.itemList.append(DatabaseMetricItem(itemClass, (itemdict, metriclist[itemdict]), inst))
-            elif MetricMethod(metriclist[itemdict]['type']) == MetricMethod('command'):
-                self.itemList.append(SystemMetricItem(itemClass, (itemdict, metriclist[itemdict])))
+                    self.itemList.append(DatabaseMetricItem(itemClass, (itemdict, item), inst))
+            elif MetricMethod(item['type']) == MetricMethod('command'):
+                self.itemList.append(SystemMetricItem(itemClass, (itemdict, item)))
 
     def updateItemDict(self, metriclist):
         for item in metriclist.keys():
             if item not in self.itemListDict.keys():
                 self.itemListDict[item] = {'table' : metriclist[item]['table']}
+
+    def pushConfig(self):
+        if self.pushConfigFlag == 0:
+            return
+        tableMapFile = os.path.join(varinfo.PUSHER_BUFFER_PATH, varinfo.TABLE_MAP_FILE)
+        jconf.SaveJsonConf(self.itemListDict, tableMapFile)
+        flag1 = self.pusher.pusher.pushFile(tableMapFile, pusher.PusherFileType('config'), 10)
+        hostListFile = os.path.join(varinfo.PUSHER_BUFFER_PATH, varinfo.HOST_LIST_FILE)
+        flag2 = self.pusher.pusher.pushFile(hostListFile, pusher.PusherFileType('config'), 10)
+        if flag1 and flag2:
+            self.pushConfigFlag = 0
 
     def itemListRefresh(self):
         if self.itemRefreshflag == 0:
@@ -391,11 +406,6 @@ class MetricManager():
             metriclist = jconf.MetricItemListGet(checkpath)
             self.initMetricItem(dir, metriclist)
             self.updateItemDict(metriclist)
-        tableMapFile = os.path.join(varinfo.PUSHER_BUFFER_PATH, varinfo.TABLE_MAP_FILE)
-        jconf.SaveJsonConf(self.itemListDict, tableMapFile)
-        self.pusher.pusher.pushFile(tableMapFile, pusher.PusherFileType('config'), 10)
-        clistfile = os.path.join(varinfo.PUSHER_BUFFER_PATH, varinfo.CLUSTER_LIST_FILE)
-        self.pusher.pusher.pushFile(clistfile, pusher.PusherFileType('config'), 10)
         self.itemRefreshflag = 0
 
     def itemListSchedule(self):
@@ -413,6 +423,7 @@ class MetricManager():
         while self.stopflag == 0:
             self.clockTick()
             self.itemListRefresh()
+            self.pushConfig()
             self.itemListSchedule()
             self.pusher.PusherSchedule(self.clockcount)
             if self.terminated == 1:
