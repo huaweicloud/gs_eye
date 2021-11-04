@@ -37,13 +37,23 @@ def MetricItemListCheck(metricItemList):
     return True
 
 
+def jsonLoad(confFile, type):
+    empty = {}
+    if not os.path.isfile(confFile):
+        logmgr.recordError("JsonConfig", "config file: %s is not exist" % confFile, "PANIC")
+        return empty
+
+    reader = open(confFile, "r").read()
+    if reader is None or reader == '':
+        logmgr.recordError("JsonConfig", "config file: %s is empty" % confFile, "PANIC")
+        return empty
+
+    return json.loads(reader, object_pairs_hook=type)
+
+
 def MetricItemListGet(confFile):
-    metricItemList = {}
-    if os.path.isfile(confFile):
-        metricItemList = json.loads(open(confFile, "r").read(), object_pairs_hook=OrderedDict)
-    else:
-        logmgr.recordError("JsonConfig", "config file is not exist", "PANIC")
-        return metricItemList
+    metricItemList = jsonLoad(confFile, OrderedDict)
+
     if "_comment" in metricItemList.keys():
         metricItemList.pop('_comment')
     if MetricItemListCheck(metricItemList) is not True:
@@ -53,30 +63,15 @@ def MetricItemListGet(confFile):
 
 
 def GetMetricManagerJsonConf(confFile):
-    mgrDict = {}
-    if os.path.isfile(confFile):
-        mgrDict = json.loads(open(confFile, "r").read(), object_pairs_hook=OrderedDict)
-    else:
-        logmgr.recordError("JsonConfig", "config file is not exist", "PANIC")
-    return mgrDict
+    return jsonLoad(confFile, OrderedDict)
 
 
 def GetLogModudeState(confFile):
-    modState = {}
-    if os.path.isfile(confFile):
-        modState = json.loads(open(confFile, "r").read())
-    else:
-        logmgr.recordError("JsonConfig", "config file is not exist", "PANIC")
-    return modState
+    return jsonLoad(confFile, OrderedDict)
 
 
 def GetImportConf(confFile):
-    importConf = {}
-    if os.path.isfile(confFile):
-        importConf = json.loads(open(confFile, "r").read(), object_pairs_hook=OrderedDict)
-    else:
-        logmgr.recordError("JsonConfig", "config file is not exist", "PANIC")
-    return importConf
+    return jsonLoad(confFile, OrderedDict)
 
 
 def SaveJsonConf(jsonDict, path):
@@ -89,20 +84,10 @@ def SaveJsonConf(jsonDict, path):
 
 
 def GetTableMappingConf(confFile):
-    tablemap = {}
-    if os.path.isfile(confFile):
-        tablemap = json.loads(open(confFile, "r").read(), object_pairs_hook=OrderedDict)
-    else:
-        logmgr.recordError("JsonConfig", "config file is not exist", "PANIC")
-    return tablemap
+    return jsonLoad(confFile, OrderedDict)
 
 
-def GetClusterListConf(confFile):
-    cluster_list_dict = {}
-    cluster_list = []
-    if os.path.isfile(confFile):
-        cluster_list_dict = json.loads(open(confFile, "r").read(), object_pairs_hook=OrderedDict)
-        cluster_list = cluster_list_dict['cluster_list']
-    else:
-        logmgr.recordError("JsonConfig", "config file is not exist", "PANIC")
-    return cluster_list
+def GetHostListConf(confFile):
+    host_list_dict = jsonLoad(confFile, OrderedDict)
+    host_list = host_list_dict['host_list']
+    return host_list
