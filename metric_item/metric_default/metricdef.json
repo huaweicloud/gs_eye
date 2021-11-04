@@ -26,6 +26,380 @@
       }
     }
   },
+  "catalog_index_backword"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 5,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "instance",
+      "query_database" : "ALL",
+      "query_string": "cn_get_catalog_index_backward.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_catalog_index_backward_t",
+      "define":{
+        "current_ctid":"tid",
+        "relid":"int",
+        "relname":"text"
+      }
+    }
+  },
+  "topsql"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 5,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "coordinator",
+      "query_database" : "postgres",
+      "query_string": "cn_get_topsql.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_top_activesql_t",
+      "define":{
+        "usename":"text",
+        "coorname":"name",
+        "datname":"name",
+        "starttime":"timestamp with time zone",
+        "runtime":"interval",
+        "xactduration":"interval",
+        "query":"text",
+        "pid":"bigint",
+        "query_id":"bigint",
+        "state":"text",
+        "waiting":"boolean",
+        "enqueue":"text"
+      }
+    }
+  },
+  "topsql_avgtime"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 5,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "coordinator",
+      "query_database" : "ALL",
+      "query_string": "cn_get_jobs_count_avgtime.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_topsql_avgtime_t",
+      "define":{
+        "application_name":"text",
+        "finished_jobs_count":"bigint",
+        "jobs_total_time":"numeric",
+		"jobs_avg_time":"numeric"
+      }
+    }
+  },
+  "sql_count"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 5,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "coordinator",
+      "query_database" : "postgres",
+      "query_string": "cn_get_sql_count.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_each_sql_count_t",
+      "define":{
+        "user_name":"text",
+        "node_name":"text",
+        "select_count":"bigint",
+        "update_count":"bigint",
+        "insert_count":"bigint",
+        "delete_count":"bigint",
+        "mergeinto_count":"bigint",
+        "ddl_count":"bigint",
+        "dml_count":"bigint",
+        "dcl_count":"bigint"
+      }
+    }
+  },
+  "sql_avgtime"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 5,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "coordinator",
+      "query_database" : "postgres",
+      "query_string": "cn_get_sql_avgtime.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_each_sql_avgtime_t",
+      "define":{
+        "user_name":"text",
+        "node_name":"text",
+        "total_select_elapse":"bigint",
+		"total_update_elapse":"bigint",
+		"total_insert_elapse":"bigint",
+		"total_delete_elapse":"bigint"
+      }
+    }
+  },
+  "sql_memory"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 5,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "instance",
+      "query_database" : "postgres",
+      "query_string": "cn_get_sql_memory.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_top_memory_sql_t",
+      "define":{
+        "usename":"text",
+        "datname":"text",
+        "query_id":"bigint",
+		"pid":"int",
+		"query":"text",
+		"contextname":"text",
+		"level":"int",
+		"parent":"text",
+		"total":"text",
+		"freesize":"text",
+		"usedsize":"text"
+      }
+    }
+  },
+  "sys_memory"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 5,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "instance",
+      "query_database" : "postgres",
+      "query_string": "cn_get_sys_memory.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_sys_memory_t",
+      "define":{
+        "nodename":"text",
+        "memorytype":"text",
+        "memorymbytes":"bigint"
+      }
+    }
+  },
+  "wait_status"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 5,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "coordinator",
+      "query_database" : "postgres",
+      "query_string": "cn_get_wait_status.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_wait_status_t",
+      "define":{
+        "wait_status":"text",
+        "wait_event":"text",
+        "count":"int"
+      }
+    }
+  },
+  "database_object"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 86400,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "coordinator",
+      "query_database" : "postgres",
+      "query_string": "cn_get_db_objects.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_object_t",
+      "define":{
+        "user_count":"int",
+        "db_count":"int",
+        "schema_count":"int",
+        "table_count":"int"
+      }
+    }
+  },
+  "catalog_deadtuple_ratio"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 86400,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "coordinator",
+      "query_database" : "postgres",
+      "query_string": "cn_get_db_deadtuple_ratio.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_catalog_deadtuple_ratio_t",
+      "define":{
+        "relname":"name",
+        "live_count":"int",
+        "dead_count":"int"
+      }
+    }
+  },
+  "data_sync"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 5,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "datanode",
+      "query_database" : "postgres",
+      "query_string": "dn_get_data_sync.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_data_sync_t",
+      "define":{
+        "pid":"bigint",
+        "sender_pid": "integer",
+        "local_role":"text",
+        "peer_role":"text",
+        "state":"text",
+        "catchup_start":"timestamp with time zone",
+        "catchup_end":"timestamp with time zone",
+        "queue_size":"integer",
+        "queue_lower_tail":"text",
+        "queue_header":"text",
+        "queue_upper_tail":"text",
+        "send_position":"text",
+        "receive_position":"text",
+        "catchup_type":"text",
+        "catchup_bcm_filename":"integer",
+        "catchup_bcm_finished":"integer",
+        "catchup_bcm_total":"integer",
+        "catchup_percent":"integer",
+        "catchup_remaining_time":"text"
+      }
+    }
+  },
+  "xlog_sync"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 5,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "datanode",
+      "query_database" : "postgres",
+      "query_string": "dn_get_xlog_sync.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_xlog_sync_t",
+      "define":{
+        "pid":"bigint",
+        "sender_pid":"integer",
+        "local_role":"text",
+        "peer_role":"text",
+        "peer_state":"text",
+        "state":"text",
+        "catchup_start":"timestamp with time zone",
+        "catchup_end":"timestamp with time zone",
+        "sender_sent_location":"text",
+        "sender_write_location":"text",
+        "sender_flush_location":"text",
+        "sender_replay_location":"text",
+        "receiver_received_location":"text",
+        "receiver_write_location":"text",
+        "receiver_flush_location":"text",
+        "receiver_replay_location":"text",
+        "sync_percent":"text",
+        "sync_state":"text",
+        "sync_priority":"text",
+        "sync_most_available":"text",
+        "channel":"text"
+      }
+    }
+  },
+  "residual_thread"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 5,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "coordinator",
+      "query_database" : "postgres",
+      "query_string": "residualThread.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_residual_thread_t",
+      "define":{
+        "query_id":"bigint",
+        "count":"int"
+      }
+    }
+  },
   "system_load_average"  : {
     "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
     "type" : "command",
