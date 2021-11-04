@@ -154,7 +154,7 @@ function run() {
                 exit 0
             fi
         fi
-        echo "ERROR: Wrong ${RUNMODE}.pid file, maybe ${MET_BIN} process is abnormal"
+        # echo "ERROR: Wrong ${RUNMODE}.pid file, maybe ${MET_BIN} process is abnormal"
     fi
     
     pid=`ps ux | grep "${MET_BIN}" | grep -v -E 'grep|sh|source' | awk '{print $2}'`
