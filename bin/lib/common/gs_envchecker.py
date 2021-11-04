@@ -150,9 +150,9 @@ class RunEnvironment(Parameter):
         Save cluster information
         """
         # Get cluster information from library lib.cluster.dbinfo
-        clister_list = {"cluster_list" : self.hostlist}
-        clistfile = os.path.join(varinfo.PUSHER_BUFFER_PATH, varinfo.CLUSTER_LIST_FILE)
-        jconf.SaveJsonConf(clister_list, clistfile)
+        host_list = {"host_list" : self.hostlist}
+        hostListFile = os.path.join(varinfo.PUSHER_BUFFER_PATH, varinfo.HOST_LIST_FILE)
+        jconf.SaveJsonConf(host_list, hostListFile)
 
     def checkParameter(self):
         """
