@@ -183,20 +183,38 @@ class PusherByHttp:
                 return False
             return True
 
+    def checkUrlOption(self, url):
+        """
+        Check remote server url if exists
+        """
+        # TODO: 使用https代替http服务
+        # It is necessary to check the log push interval
+        # The curl command tests the connection with a one-second timeout
+        # TODO: 探活服务端
+        command = "curl -m 1 %s" % url
+        status, output = commands.getstatusoutput(command)
+        if status != 0 or "<title>404 Not Found</title>" in output:
+            logmgr.recordError("Pusher", "check remote path %s failed" % url)
+            return False
+        return True
+
     def pushFile(self, sourceFile, filetype, timeout):
         """
         function : Push archive files to remote server
         input : NA
         output : NA
         """
-        if not self.checkUrlOptions():
-            return False
+        # if not self.checkUrlOptions():
+        #     return False
         if filetype == PusherFileType('data'):
             url = self.remoteDataPath
         elif filetype == PusherFileType('config'):
             url = self.remoteConfPath
         else:
             logmgr.recordError(LOG_MODULE, "Error file type \"%s\" to \"%s\"" % (sourceFile, filetype))
+            return False
+
+        if not self.checkUrlOption(url):
             return False
 
         if os.path.isfile(sourceFile):
