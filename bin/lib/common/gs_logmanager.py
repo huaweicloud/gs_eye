@@ -37,9 +37,9 @@ LOG_MODULE = "LOGGING"
 
 def LogLevel(level):
     levelList = {
-        "PANIC" : 0,
-        "LOG" : 1,
-        "DEBUG" : 2
+        "PANIC" : 9,
+        "LOG" : 10,
+        "DEBUG" : 11
     }
     return levelList[level]
 
@@ -80,7 +80,7 @@ def recordError(module, msg, level = "LOG"):
     else:
         curModlevel = LogLevel("LOG")
     # Use lock to prevent logging errors from multithreaded logging
-    if LogLevel(level) >= curModlevel:
+    if LogLevel(level) <= curModlevel:
         lock.acquire()
         _logs.logWriteAndTimer(error)
         lock.release()
