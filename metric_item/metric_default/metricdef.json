@@ -1,6 +1,6 @@
 {
   "_comment" : "config for default metric item, DON'T change this file if not needed ",
-  "active_query_count"  : {
+  "database_concurrency_enqueue"  : {
     "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
     "type" : "query",
     "collector" : {
@@ -26,13 +26,13 @@
       }
     }
   },
-  "catalog_index_backword"  : {
+  "database_catalog_index_backword"  : {
     "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
     "type" : "query",
     "collector" : {
       "_comment" : "method could be set in off/durative/times/dry",
       "method" : "durative",
-      "interval" : 5,
+      "interval" : 86400,
       "times" : 100
     },
     "metric_func": {
@@ -50,13 +50,13 @@
       }
     }
   },
-  "topsql"  : {
+  "database_top_activesql"  : {
     "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
     "type" : "query",
     "collector" : {
       "_comment" : "method could be set in off/durative/times/dry",
       "method" : "durative",
-      "interval" : 5,
+      "interval" : 30,
       "times" : 100
     },
     "metric_func": {
@@ -83,18 +83,18 @@
       }
     }
   },
-  "topsql_avgtime"  : {
+  "database_topsql_avgtime"  : {
     "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
     "type" : "query",
     "collector" : {
       "_comment" : "method could be set in off/durative/times/dry",
       "method" : "durative",
-      "interval" : 5,
+      "interval" : 86400,
       "times" : 100
     },
     "metric_func": {
       "query_type" : "coordinator",
-      "query_database" : "ALL",
+      "query_database" : "postgres",
       "query_string": "cn_get_jobs_count_avgtime.sql"
     },
     "table" : {
@@ -108,18 +108,18 @@
       }
     }
   },
-  "sql_count"  : {
+  "database_each_sql_count"  : {
     "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
     "type" : "query",
     "collector" : {
       "_comment" : "method could be set in off/durative/times/dry",
       "method" : "durative",
-      "interval" : 5,
+      "interval" : 60,
       "times" : 100
     },
     "metric_func": {
       "query_type" : "coordinator",
-      "query_database" : "postgres",
+      "query_database" : "ALL",
       "query_string": "cn_get_sql_count.sql"
     },
     "table" : {
@@ -139,18 +139,18 @@
       }
     }
   },
-  "sql_avgtime"  : {
+  "database_each_sql_avgtime"  : {
     "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
     "type" : "query",
     "collector" : {
       "_comment" : "method could be set in off/durative/times/dry",
       "method" : "durative",
-      "interval" : 5,
+      "interval" : 60,
       "times" : 100
     },
     "metric_func": {
       "query_type" : "coordinator",
-      "query_database" : "postgres",
+      "query_database" : "ALL",
       "query_string": "cn_get_sql_avgtime.sql"
     },
     "table" : {
@@ -166,13 +166,13 @@
       }
     }
   },
-  "sql_memory"  : {
+  "database_top_memory_sql"  : {
     "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
     "type" : "query",
     "collector" : {
       "_comment" : "method could be set in off/durative/times/dry",
       "method" : "durative",
-      "interval" : 5,
+      "interval" : 30,
       "times" : 100
     },
     "metric_func": {
@@ -198,13 +198,13 @@
       }
     }
   },
-  "sys_memory"  : {
+  "database_sys_memory"  : {
     "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
     "type" : "query",
     "collector" : {
       "_comment" : "method could be set in off/durative/times/dry",
       "method" : "durative",
-      "interval" : 5,
+      "interval" : 60,
       "times" : 100
     },
     "metric_func": {
@@ -222,13 +222,13 @@
       }
     }
   },
-  "wait_status"  : {
+  "database_wait_status"  : {
     "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
     "type" : "query",
     "collector" : {
       "_comment" : "method could be set in off/durative/times/dry",
       "method" : "durative",
-      "interval" : 5,
+      "interval" : 30,
       "times" : 100
     },
     "metric_func": {
@@ -257,7 +257,7 @@
     },
     "metric_func": {
       "query_type" : "coordinator",
-      "query_database" : "postgres",
+      "query_database" : "ALL",
       "query_string": "cn_get_db_objects.sql"
     },
     "table" : {
@@ -271,7 +271,7 @@
       }
     }
   },
-  "catalog_deadtuple_ratio"  : {
+  "database_catalog_deadtuple_ratio"  : {
     "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
     "type" : "query",
     "collector" : {
@@ -295,13 +295,13 @@
       }
     }
   },
-  "data_sync"  : {
+  "database_data_sync"  : {
     "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
     "type" : "query",
     "collector" : {
       "_comment" : "method could be set in off/durative/times/dry",
       "method" : "durative",
-      "interval" : 5,
+      "interval" : 15,
       "times" : 100
     },
     "metric_func": {
@@ -325,23 +325,17 @@
         "queue_header":"text",
         "queue_upper_tail":"text",
         "send_position":"text",
-        "receive_position":"text",
-        "catchup_type":"text",
-        "catchup_bcm_filename":"integer",
-        "catchup_bcm_finished":"integer",
-        "catchup_bcm_total":"integer",
-        "catchup_percent":"integer",
-        "catchup_remaining_time":"text"
+        "receive_position":"text"
       }
     }
   },
-  "xlog_sync"  : {
+  "database_xlog_sync"  : {
     "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
     "type" : "query",
     "collector" : {
       "_comment" : "method could be set in off/durative/times/dry",
       "method" : "durative",
-      "interval" : 5,
+      "interval" : 15,
       "times" : 100
     },
     "metric_func": {
@@ -377,13 +371,96 @@
       }
     }
   },
-  "residual_thread"  : {
+  "database_wlm_statistics"  : {
     "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
     "type" : "query",
     "collector" : {
       "_comment" : "method could be set in off/durative/times/dry",
       "method" : "durative",
-      "interval" : 5,
+      "interval" : 600,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "coordinator",
+      "query_database" : "postgres",
+      "query_string": "cn_get_wlm_statistics.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_wlm_statistics_t",
+      "define":{
+        "username" : "name",
+        "nodename" : "text",
+        "query_band" : "text",
+        "pid" : "bigint",
+        "start_time" : "timestamp",
+        "block_time" : "bigint",
+        "enqueue" : "text",
+        "resource_pool" : "name",
+        "estimate_memory" : "integer",
+        "max_peak_memory" : "integer",
+        "spill_info" : "text",
+        "max_spill_size" : "integer",
+        "average_spill_size" : "integer",
+        "max_peak_iops" : "integer",
+        "warning" : "text"
+      }
+    }
+  },
+  "database_wlmstat"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 30,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "coordinator",
+      "query_database" : "postgres",
+      "query_string": "cn_get_wlmstat.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_wlmstat_t",
+      "define":{
+        "attribute" : "text",
+        "status" : "text",
+        "enqueue" : "text",
+        "count" : "int"
+      }
+    }
+  },
+  "database_workload_struct"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 600,
+      "times" : 100
+    },
+    "metric_func": {
+      "query_type" : "coordinator",
+      "query_database" : "postgres",
+      "query_string": "cn_get_workload_struct.sql"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_workload_struct_t",
+      "define":{
+        "struct_info" : "text"
+      }
+    }
+  },
+  "database_residual_thread"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "query",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 21600,
       "times" : 100
     },
     "metric_func": {
