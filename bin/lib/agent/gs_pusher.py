@@ -18,6 +18,9 @@
 try:
     import os
     import sys
+    import imp
+    imp.reload(sys)
+    sys.setdefaultencoding('utf8')
     import time
     import commands
     import socket

@@ -18,6 +18,9 @@
 try:
     import os
     import sys
+    import imp
+    imp.reload(sys)
+    sys.setdefaultencoding('utf8')
     import json
     import commands
     import lib.common.gs_logmanager as logmgr

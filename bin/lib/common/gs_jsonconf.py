@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#-*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
 #######################################################################
 # Portions Copyright (c): 2021-2025, Huawei Tech. Co., Ltd.
 #
@@ -18,8 +18,12 @@
 try:
     import os
     import sys
+    import imp
+    imp.reload(sys)
+    sys.setdefaultencoding('utf8')
     import json
     import gs_logmanager as logmgr
+    import gs_constvalue as varinfo
     from collections import OrderedDict
 except Exception as e:
     sys.exit("FATAL: %s Unable to import module: %s" % (__file__, e))
@@ -53,7 +57,6 @@ def jsonLoad(confFile, type):
 
 def MetricItemListGet(confFile):
     metricItemList = jsonLoad(confFile, OrderedDict)
-
     if "_comment" in metricItemList.keys():
         metricItemList.pop('_comment')
     if MetricItemListCheck(metricItemList) is not True:
@@ -76,6 +79,7 @@ def GetImportConf(confFile):
 
 def SaveJsonConf(jsonDict, path):
     json_str = json.dumps(jsonDict)
+
     dirname = os.path.dirname(path)
     if not os.path.isdir(dirname):
         os.makedirs(dirname)
@@ -91,3 +95,17 @@ def GetHostListConf(confFile):
     host_list_dict = jsonLoad(confFile, OrderedDict)
     host_list = host_list_dict['host_list']
     return host_list
+
+
+def AddTemplateToJconf(dir, path):
+    checkpath = os.path.join(varinfo.METRIC_ITEM_DIR, dir, "metricdef.json")
+    if not os.path.isfile(checkpath):
+        logmgr.recordError(LOG_MODULE, "Failed to get json in %s" % checkpath)
+        return
+    metriclist = MetricItemListGet(checkpath)
+    newMetric = jsonLoad(path, OrderedDict)
+    for k in newMetric.keys():
+        if k in metriclist.keys():
+            logmgr.recordError(LOG_MODULE, "Failed to add duplicate metric %s" % k)
+        metriclist[k] = newMetric[k]
+    SaveJsonConf(metriclist, checkpath)

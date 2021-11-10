@@ -33,7 +33,8 @@ function usage() {
 Usage:
   ./${START_BIN} help
   Example:
-    ./${START_BIN} [[start | stop | status ] [ --server | --agent]] [ install | version | help ]
+    ./${START_BIN} [[start | stop | status ] [ --server | --agent]] | [ install | version | help ] 
+	    | [ metric [ add [ template_file ]] | [ enable | disable [ METRICNAME ]]]
 
 General options:
     main command:
@@ -70,6 +71,23 @@ function install() {
     done
 }
 
+install_template_file() {
+    for host in ${1}; do
+        exist=`ssh -q ${host} "if [ -d ${MET_HOME} ]; then echo 1; else echo 0; fi"`
+        if [ "$?" != 0 ]; then
+            echo "FATAL: Could not check the path ${MET_HOME} in host ${1}"
+            return 5
+        fi
+        scp -q -r ${MET_HOME}/metric_template.json ${host}:${MET_HOME}
+        if [ "$?" != 0 ]; then
+            echo "FATAL: Could not make the path ${MET_HOME} in host ${1}"
+            return 6
+        else
+            echo "Success installed in host: $host"
+        fi
+    done
+}
+
 function check_script() {
     exist=`ssh -q ${1} "if [ -d ${MET_HOME} ]; then echo 1; else echo 0; fi"`
     if [ "$?" != 0 ]; then
@@ -94,8 +112,8 @@ function check_script() {
             return 8
         fi
     else
-        mver=`${BIN_HOME}/${MET_BIN} -v 2>&1`
-        rver=`ssh -q ${1} "${BIN_HOME}/${MET_BIN} -v 2>&1"`
+        mver=`source /opt/huawei/Bigdata/mppdb/.mppdbgs_profile;cd ${BIN_HOME};${BIN_HOME}/${MET_BIN} -v 2>&1`
+        rver=`ssh -q ${1} "source /opt/huawei/Bigdata/mppdb/.mppdbgs_profile;cd ${BIN_HOME};${BIN_HOME}/${MET_BIN} -v 2>&1"`
         if [ "${rver}" != "${mver}" ]; then
             scp -q -r ${MET_HOME}/* ${1}:${MET_HOME}
             if [ "$?" != "0" ]; then
@@ -154,7 +172,7 @@ function run() {
                 exit 0
             fi
         fi
-        # echo "ERROR: Wrong ${RUNMODE}.pid file, maybe ${MET_BIN} process is abnormal"
+        echo "ERROR: Wrong ${RUNMODE}.pid file, maybe ${MET_BIN} process is abnormal"
     fi
     
     pid=`ps ux | grep "${MET_BIN}" | grep -v -E 'grep|sh|source' | awk '{print $2}'`
@@ -242,6 +260,65 @@ function initmode() {
     esac
 }
 
+
+function metric_ops() {
+    RUNMODE="agent"
+    MET_BIN=$AGENT_BIN
+    pid=0
+    if [ -f "${MET_HOME}/${RUNMODE}.pid" ]; then
+        pid=`cat ${MET_HOME}/${RUNMODE}.pid`
+        if [ -f "/proc/${pid}/cmdline" ]; then
+            if [[ `cat /proc/${pid}/cmdline` != *"${BIN_HOME}/${MET_BIN}"* ]]; then
+                pid=`ps ux | grep "${MET_BIN}" | grep -v -E 'grep|sh|source' | awk '{print $2}'`
+            fi
+        fi
+    else
+        pid=`ps ux | grep "${MET_BIN}" | grep -v -E 'grep|sh|source' | awk '{print $2}'`
+    fi
+    cd ${BIN_HOME}    
+    case "$1" in
+        add)
+            python ./gs_metric_ops.py -a "../$2" -p ${pid}
+            ;;
+        enable)
+            python ./gs_metric_ops.py -e "$2" -p ${pid}
+            ;;
+        disable)
+            python ./gs_metric_ops.py -d "$2" -p ${pid}
+            ;;
+        list)
+            python ./gs_metric_ops.py -l "$2" -p ${pid}
+            ;;
+        *)
+            usage
+            ;;
+    esac    
+}
+
+function metric_daemon() {
+    hosts=${1}
+    shift
+
+    ${START_HOME}/${START_BIN} metric_ops $@
+    if [ "$?" != "0" ]; then
+        echo "FATAL: Could not add metric"
+    else
+        echo "Successfully add metric"
+    fi
+
+    for host in ${hosts}; do
+        check_script ${host}
+        if [ "$?" == "0" ]; then
+            ssh -q ${host} "sh ${START_HOME}/${START_BIN} metric_ops $@"
+            if [ "$?" != "0" ]; then
+                echo "FATAL: Could not add metric in host ${host}"
+            else
+                echo "Successfully add metric in host ${host}"
+            fi
+        fi
+    done
+}
+
 function main() {
     environ=`echo $MPPDB_ENV_SEPARATE_PATH`
     if [ "${environ}" == "" ]; then
@@ -286,6 +363,16 @@ function main() {
             ;;
         install)
             install "${cluster}"
+            ;;
+        metric)
+            shift
+            install_template_file "${cluster}"
+            initmode "--agent"
+            metric_daemon "${cluster}" $@
+            ;;
+        metric_ops)
+            shift
+            metric_ops $@
             ;;
         *)
             usage

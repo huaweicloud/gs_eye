@@ -18,6 +18,9 @@ try:
     import os
     import stat
     import sys
+    import imp
+    imp.reload(sys)
+    sys.setdefaultencoding('utf8')
     import commands
     import threading
     import signal
@@ -66,11 +69,10 @@ def createDBData(inFile, nodename, instance, outFile):
         # Add the new fields timestamp, instance name
         # The data block location is determined by the delimiter
         for val in value:
-            val = val.lower()
-            if val.startswith("set") or val.startswith(
+            if val.upper().startswith("SET") or val.startswith(
                     "total time:") or val == "" or varinfo.DATA_TYPE_DELIMITER in val:
                 continue
-            elif val.startswith(varinfo.LABEL_HEAD_PREFIX):
+            elif val.upper().startswith(varinfo.LABEL_HEAD_PREFIX):
                 f.write(val.replace(varinfo.LABEL_HEAD_PREFIX,
                                     "%s|%s|%s" % (timestamp, nodename, instance)))
             else:
