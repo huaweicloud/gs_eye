@@ -21,6 +21,7 @@ try:
     import time
     import commands
     import signal
+    import lib.common.cluster.gs_instance_manager as dbinfo
     from lib.common import gs_constvalue as varinfo
     from lib.common import gs_envchecker as checker, gs_jsonconf as jconf, gs_logmanager as logmgr
     import lib.agent.gs_pusher as pusher
@@ -163,8 +164,9 @@ class DatabaseMetricItem(MetricItem):
         tempFileName = ".tmp_gs_metric_" + self.name
         self.tempfile = os.path.join(varinfo.METRIC_ITEM_DIR, itemclass, tempFileName)
         self.instanceInfo = instanceInfo
-        self.queryCmd = "gsql -d postgres -p %s " % instanceInfo.port + " -f "
-        if self.queryType == QueryType(instanceInfo.instType):
+        database = itemDefine[1]['metric_func']['query_database']
+        self.queryCmd = "gsql -d %s" % database + " -p %s " % instanceInfo.port + " -f "
+        if self.queryType == QueryType(instanceInfo.instType) or self.queryType == QueryType("instance"):
             self.schedState = ScheduleState('schedule')
         else:
             self.schedState = ScheduleState('offline')
@@ -190,7 +192,7 @@ class DatabaseMetricItem(MetricItem):
             self.failureCount += 1
             if self.failureCount >= varinfo.METRIC_MAX_FAILURE:
                 # Query the instance status after five consecutive failures
-                self.state = self.node.getNodeState("DBMetric")
+                self.state = dbinfo.getNodeState("DBMetric")
         else:
             # Refresh number of failed after successful query
             self.failureCount = 0
@@ -306,15 +308,15 @@ class SystemMetricItem(MetricItem):
         output : result information
         """
         # Some path information may be required by the system items
-        cmd = self.metricCmd + self.cmdOption + '|' + self.outputFormation
+        cmd = self.metricCmd + " " + self.cmdOption + '|' + self.outputFormation
         status, output = commands.getstatusoutput(cmd)
         if status != 0 or not output:
             logmgr.recordError("SysMetric", "Failed to get shell result for item \"%s\", err: %s"
-                               % (self.item.name, output))
+                               % (self.name, output))
             output = "[SysMetric]: " + output
         else :
             output = varinfo.LABEL_HEAD_PREFIX + '|' + output
-            output = output.replace("\n", "\n" + varinfo.LABEL_HEAD_PREFIX)
+            output = output.replace("\n", "\n" + varinfo.LABEL_HEAD_PREFIX + '|')
             output = varinfo.DATA_TYPE_DELIMITER + "\n" + output + "\n" + varinfo.DATA_TYPE_DELIMITER
         return output
 
@@ -346,7 +348,9 @@ class MetricManager():
         self.itemList = []
         self.itemListDict = {}
         self.instanceList = instanceList
+        self.databases = self.getDatabases()
         signal.signal(signal.SIGINT, lambda signal, frame: self._signal_handler())
+        signal.signal(signal.SIGUSR2, lambda signal, frame: self._metric_handler())
         self.terminated = False
         if "pusher" in metricMgrConfjson.keys():
             self.pusher = pusher.Pusher(metricMgrConfjson['pusher'])
@@ -354,6 +358,33 @@ class MetricManager():
     def _signal_handler(self):
         self.terminated = True
         sys.exit()
+
+    def _metric_handler(self):
+        label = open(varinfo.METRIC_SIGFLAG_FILE, "r").read().split('\n')
+        flag = label[0]
+        item = label[1]
+        if "add" in flag:
+            self.pushConfigFlag = 1
+            self.itemRefreshflag = 1
+        if "disable" in flag:
+            self.disableMetric(item)
+        if "enable" in flag:
+            self.enableMetric(item)
+        os.remove(varinfo.METRIC_SIGFLAG_FILE)
+
+    def disableMetric(self, name):
+        for item in self.itemList:
+            if name not in item.name:
+                continue
+            item.itemDisable()
+        return
+
+    def enableMetric(self, name):
+        for item in self.itemList:
+            if name not in item.name:
+                continue
+            item.itemEnable()
+        return
 
     def clockTick(self):
         """
@@ -367,6 +398,28 @@ class MetricManager():
     def getClockTick(self):
         return self.clockcount
 
+    def initQueryType(self, item):
+        queryType = [item["metric_func"]["query_type"]]
+        if queryType[0] == "none":
+            queryType = []
+        if queryType[0] == "instance":
+            queryType = ["coordinator", "datanode"]
+        return queryType
+
+    def initDatabaseList(self, item):
+        database = [item["metric_func"]["query_database"]]
+        if database[0].lower() == "all":
+            database = self.databases
+        return database
+
+    def getDatabases(self):
+        status, output = commands.getstatusoutput("gsql -d postgres -p 25308 -c 'select datname from pg_database'")
+        if status != 0 or not output:
+            logmgr.recordError("SysMetric", "Failed to query all database")
+        array = output.split("\n")[2:-2]
+        database = [element.strip() for element in array if "template1" not in element and "template0" not in element]
+        return database
+
     def initMetricItem(self, itemClass, metriclist):
         metricNameList = map(lambda metricItem: metricItem.name, self.itemList)
         for itemdict in metriclist.keys():
@@ -374,8 +427,14 @@ class MetricManager():
             if itemdict in metricNameList:
                 continue
             if MetricMethod(item['type']) == MetricMethod('query'):
+                queryType = self.initQueryType(item)
+                queryDatabase = self.initDatabaseList(item)
                 for inst in self.instanceList:
-                    self.itemList.append(DatabaseMetricItem(itemClass, (itemdict, item), inst))
+                    if inst.instType not in queryType:
+                        continue
+                    for database in queryDatabase:
+                        item["metric_func"]["query_database"] = database
+                        self.itemList.append(DatabaseMetricItem(itemClass, (itemdict, item), inst))
             elif MetricMethod(item['type']) == MetricMethod('command'):
                 self.itemList.append(SystemMetricItem(itemClass, (itemdict, item)))
 
