@@ -1,3 +1,4 @@
+set statement_timeout = '10min';
 SELECT application_name
  ,count(*) AS finished_jobs_count
  ,sum(duration) AS jobs_total_time
