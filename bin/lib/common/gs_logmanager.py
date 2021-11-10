@@ -18,12 +18,16 @@
 try:
     import os
     import sys
+    import imp
+    imp.reload(sys)
+    sys.setdefaultencoding('utf8')
     import json
     import time
     import lib.common.gs_constvalue as varinfo
     import commands
     import threading
     import glob
+    import fcntl
     import gs_jsonconf as jconf
 except Exception as e:
     sys.exit("FATAL: %s Unable to import module: %s" % (__file__, e))
@@ -171,8 +175,12 @@ class MetricLog:
         input : log message
         output : NA
         """
-        self.log.write(message + "\n")
-        self.log.flush()
+        try:
+            fcntl.lockf(self.log, fcntl.LOCK_EX)
+            self.log.write(message + "\n")
+            self.log.flush()
+        finally:
+            fcntl.flock(self.log, fcntl.LOCK_UN)
 
     def logWriteAndTimer(self, message):
         """
@@ -284,8 +292,8 @@ class RunningLog:
         # Avoid residual file descriptors
         self.log.close()
         # If the log directory is deleted, create it here
-        if not os.path.isdir(self.curFile):
-            os.makedirs(self.curFile)
+        if not os.path.isdir(self.curFileBase):
+            os.makedirs(self.curFileBase)
         self.file = os.path.join(self.curFileBase + time.strftime(
             varinfo.METRIC_LOGFILE_FORMAT, time.localtime()))
         self.log = open(self.file, "w+")
