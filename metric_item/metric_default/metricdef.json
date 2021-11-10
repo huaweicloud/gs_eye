@@ -187,7 +187,7 @@
         "usename":"text",
         "datname":"text",
         "query_id":"bigint",
-		"pid":"int",
+		"pid":"text",
 		"query":"text",
 		"contextname":"text",
 		"level":"int",
@@ -391,8 +391,8 @@
       "define":{
         "username" : "name",
         "nodename" : "text",
-        "query_band" : "text",
-        "pid" : "bigint",
+        "pid" : "text",
+        "queryid" : "text",
         "start_time" : "timestamp",
         "block_time" : "bigint",
         "enqueue" : "text",
@@ -403,7 +403,8 @@
         "max_spill_size" : "integer",
         "average_spill_size" : "integer",
         "max_peak_iops" : "integer",
-        "warning" : "text"
+        "warning" : "text",
+        "query_band" : "text"
       }
     }
   },
@@ -425,6 +426,7 @@
       "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
       "name" : "database_wlmstat_t",
       "define":{
+        "resource_pool" : "text",
         "attribute" : "text",
         "status" : "text",
         "enqueue" : "text",
