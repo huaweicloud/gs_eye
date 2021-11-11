@@ -308,7 +308,10 @@ class SystemMetricItem(MetricItem):
         output : result information
         """
         # Some path information may be required by the system items
-        cmd = self.metricCmd + " " + self.cmdOption + '|' + self.outputFormation
+        if len(self.outputFormation) > 0 :
+            cmd = self.metricCmd + " " + self.cmdOption + '|' + self.outputFormation
+        else:
+            cmd = self.metricCmd + " " + self.cmdOption
         status, output = commands.getstatusoutput(cmd)
         if status != 0 or not output:
             logmgr.recordError("SysMetric", "Failed to get shell result for item \"%s\", err: %s"

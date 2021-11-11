@@ -532,5 +532,41 @@
         "idle"     :   "float"
       }
     }
+  },
+  "database_probe_stat"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 10,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "os/queryprobe.sh",
+      "option" : "",
+      "formation" : ""
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "database_probe_t",
+      "define":{
+        "set_time" : "float",
+        "start_xact_time" : "float",
+        "create_time" : "float",
+        "insert_time" : "float",
+        "gather_time" : "float",
+        "redistribute_min_time" : "float",
+        "redistribute_max_time" : "float",
+        "scan_tB_min_time" : "float",
+        "scan_tB_max_time" : "float",
+        "scan_tA_min_time" : "float",
+        "scan_tA_max_time" : "float",
+        "analyze_total_time" : "float",
+        "drop_time" : "float",
+        "commit_time" : "float",
+        "total_probe_time" : "float"
+      }
+    }
   }
 }
