@@ -19,7 +19,7 @@ try:
     import sys
     import commands
     sys.path.append(os.environ.get("METRIC_LIB"))
-    import cluster.dbinfo as dbinfo
+    import lib.common.cluster.gs_instance_manager as dbinfo
 except Exception as e:
     sys.exit("FATAL: Unable to import module: %s" % e)
 
