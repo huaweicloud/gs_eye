@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# coding=utf-8
 #######################################################################
 # Portions Copyright (c): 2021-2025, Huawei Tech. Co., Ltd.
 #
@@ -21,12 +22,14 @@ try:
     import imp
     imp.reload(sys)
     sys.setdefaultencoding('utf8')
-    import commands
     import threading
     import signal
     import time
     import datetime
-    from datetime import timedelta
+    import zipfile
+    from threading import Thread
+    from lib.common.gs_threadpool import GaussThreadPool
+    from lib.common.CommonCommand import CommonCommand as commander
     import lib.common.gs_logmanager as logmgr
     import lib.common.gs_constvalue as varinfo
     from lib.common import gs_envchecker as checker, gs_jsonconf as jconf
@@ -37,67 +40,11 @@ except Exception as e:
 LOG_MODULE = "DATA_IMPORT"
 
 
-def createDBData(inFile, nodename, instance, outFile):
-    """
-    function : Deal with database metric data body to write into copy file
-    input : data body, instance name, metric information
-    output : NA
-    """
-    logmgr.recordError(LOG_MODULE, "Start to write data into temp  %s" % outFile, "DEBUG")
-    data = ""
-    path = os.path.dirname(inFile)
-    if inFile.endswith(".zip"):
-        command = "unzip -o %s -d %s" % (inFile, path)
-        status, output = commands.getstatusoutput(command)
-        if status != 0:
-            return
-    if not inFile.endswith(".log"):
-        return
-    # Split the data by timestamp
-    delimiter = varinfo.RECORD_BEGIN_DELIMITER + "\n[timer: "
-    data = open(inFile[:-3] + "log", "r").read().split(delimiter)
-    f = open(outFile, 'w+')
-    for item in data:
-        if varinfo.DATA_TYPE_DELIMITER not in item:
-            continue
-        timestamp, value = item.split("]\n", 1)
-        # Skip the invalid log information
-        if value.startswith("[DBMetric]:"):
-            continue
-        # Use delimiters to separate data blocks
-        value = value.split(varinfo.DATA_TYPE_DELIMITER + "\n")
-        # Add the new fields timestamp, instance name
-        # The data block location is determined by the delimiter
-        for val in value:
-            if val.upper().startswith("SET") or val.startswith(
-                    "total time:") or val == "" or varinfo.DATA_TYPE_DELIMITER in val:
-                continue
-            elif val.upper().startswith(varinfo.LABEL_HEAD_PREFIX):
-                f.write(val.replace(varinfo.LABEL_HEAD_PREFIX,
-                                    "%s|%s|%s" % (timestamp, nodename, instance)))
-            else:
-                logmgr.recordError(LOG_MODULE,
-                                   "createDBData found illegal data: %s, the data from source: %s" % (val, inFile))
-        # Save the latest timestamp to weed out outdated data
-    f.close()
-
-
 class DataImport:
     def __init__(self, conf, coordinator):
-        self.interval = conf['interval']
-        clusterConf = conf['cluster_list']
-        if "_comment" in clusterConf.keys():
-            clusterConf.pop('_comment')
-        self.clusterList = []
-        for c in clusterConf.keys():
-            if clusterConf[c] == "on":
-                self.clusterList.append(c)
         self.sourceDataPath = conf['data_root_path']
-        self.queryCmdPrefix = "gsql -d postgres -p " + str(coordinator.port) + " -c "
         self.database = conf['metric_database'].lower()
-        self.tableMapping = {}
-        self.statistics = {'insert': 0}
-        logmgr.recordError(LOG_MODULE, "Init data importor %s " % self.queryCmdPrefix)
+        self.gsMetricPool = GaussThreadPool(5)
         self.terminated = False
         signal.signal(signal.SIGINT, lambda signal, frame: self._signal_handler())
 
@@ -105,262 +52,302 @@ class DataImport:
         self.terminated = True
         sys.exit()
 
-    def loadTableMapping(self, cluster):
-        configPath = os.path.join(self.sourceDataPath, cluster, "conf")
-        tablemap = jconf.GetTableMappingConf(os.path.join(configPath, varinfo.TABLE_MAP_FILE))
-        if len(tablemap) == 0:
-            logmgr.recordError(LOG_MODULE, "Cluster %s failed to load table map file" % (cluster))
-        self.tableMapping[cluster] = tablemap
+    def checkDatabaseExist(self):
+        sql = "select * from pg_database where datname = '%s'" % self.database
+        result = []
+        try:
+            (status, result, err_output) = commander.executeSqlOnLocalhost(str(sql))
+            if status != varinfo.PGRES_TUPLES_OK:
+                logmgr.recordError(LOG_MODULE, "Failed to check database %s from pg_database, err: %s"
+                                   % (self.database, err_output), "PANIC")
+        except Exception as e:
+            logmgr.recordError(LOG_MODULE, "exception occur while execute SQL: %s. exception: %s" % (sql, e), "DEBUG")
+        if len(result) > 0:
+            logmgr.recordError(LOG_MODULE, "database already exist, no need to create.")
+        return len(result) > 0
 
-    def mkdirAndChmodDir(self, path, mod):
-        if not os.path.isdir(path):
-            os.makedirs(path)
-            os.chmod(path, mod)
+    def createDatabase(self):
+        logmgr.recordError(LOG_MODULE, "create database: %s to store metric data" % self.database)
+        sql = "create database %s" % self.database
+        try:
+            (status, result, err_output) = commander.executeSqlOnLocalhost(str(sql))
+            if status != varinfo.PGRES_COMMAND_OK:
+                logmgr.recordError(LOG_MODULE, "Failed to create database %s, err: %s" % (self.database, err_output))
+        except Exception as e:
+            logmgr.recordError(LOG_MODULE, "exception occur while execute SQL: %s. exception: %s" % (sql, e), "DEBUG")
 
-    def checkAndInitDir(self, cluster):
-        self.mkdirAndChmodDir(self.sourceDataPath, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-        clusterPath = os.path.join(self.sourceDataPath, cluster)
-        self.mkdirAndChmodDir(clusterPath, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-        configPath = os.path.join(self.sourceDataPath, cluster, "conf")
-        self.mkdirAndChmodDir(configPath, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-        dataPath = os.path.join(self.sourceDataPath, cluster, "data")
-        self.mkdirAndChmodDir(dataPath, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
-        hostListFile = os.path.join(configPath, varinfo.HOST_LIST_FILE)
-        while not os.path.isfile(hostListFile):
-            logmgr.recordError(LOG_MODULE, "waiting agent cluster %s pushing %s" % (cluster, hostListFile))
-            time.sleep(10)
+    def listExistedCluster(self):
+        dirAndFileList = os.listdir(self.sourceDataPath)
+        dirList = [element for element in dirAndFileList if not str(element).endswith(".json")]
+        return dirList
 
-        host_list = jconf.GetHostListConf(hostListFile)
-        for host in host_list:
-            hostPath = os.path.join(dataPath, host)
-            self.mkdirAndChmodDir(hostPath, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+    def createThreadTask(self):
+        logmgr.recordError(LOG_MODULE, "create import task.")
+        importTaskList = []
+        clusters = self.listExistedCluster()
+        if len(clusters) == 0:
+            logmgr.recordError(LOG_MODULE, "not found registered cluster.")
+            return importTaskList
+        logmgr.recordError(LOG_MODULE, "found registered cluster: %s" % (",".join(clusters)))
+        for cluster in clusters:
+            logmgr.recordError(LOG_MODULE, "create import task for cluster: %s" % cluster)
+            importTaskList.append(ImportTask(cluster, self.sourceDataPath, self.database))
+        return importTaskList
+
+    @staticmethod
+    def unmarkRegisterFlag():
+        global registerFlag
+        try:
+            lock.acquire()
+            registerFlag = ""
+        finally:
+            lock.release()
+
+    def submitRegisteredCluster(self):
+        importTaskList = self.createThreadTask()
+        for importTask in importTaskList:
+            self.gsMetricPool.Submit(importTask.runImport(), 30)
+        self.unmarkRegisterFlag()
+
+    def addNewCluster(self, cluster):
+        logmgr.recordError(LOG_MODULE, "create import task for cluster: %s" % cluster)
+        importTask = ImportTask(cluster, self.sourceDataPath, self.database)
+        self.gsMetricPool.Submit(importTask.runImport(), 30)
+        self.unmarkRegisterFlag()
+
+    def dataImport(self):
+        logmgr.recordError(LOG_MODULE, "start data import.")
+        self.submitRegisteredCluster()
+        while True:
+            if registerFlag == "":
+                logmgr.recordError(LOG_MODULE, "not found new cluster to create import task")
+            else:
+                clusterName = registerFlag
+                logmgr.recordError(LOG_MODULE, "found new cluster: %s to create import task" % clusterName)
+                self.addNewCluster(clusterName)
+            time.sleep(60)
 
     def initDatabase(self):
-        """
-        Check whether the database exists, if not, create it
-        """
-        # Get database information from pg_database
-        sql = "copy (select count(*) from pg_database where datname = '%s') to stdout;" % self.database
-        status, output = commands.getstatusoutput("%s \"%s\"" % (self.queryCmdPrefix, sql))
-        if status != 0 or int(output) > 1:
-            logmgr.recordError(LOG_MODULE, "Failed to check database \"%s\" from pg_database, err: %s"
-                               % (self.database, output))
-        elif output != "1":
-            sql = "create database %s;" % self.database
-            status, output = commands.getstatusoutput("%s \"%s\"" % (self.queryCmdPrefix, sql))
-            if status != 0 or output.upper() != "CREATE DATABASE":
-                logmgr.recordError(LOG_MODULE, "Failed to create database \"%s\", err: %s" % (self.database, output))
-        # The next step requires connecting to the new library
-        self.queryCmdPrefix = self.queryCmdPrefix.replace("postgres", self.database, 1)
+        if not self.checkDatabaseExist():
+            self.createDatabase()
 
-    def checkSchema(self, schema):
-        """
-        function : Check whether the schema exists, if not, create it
-        input : NA
-        output : result state
-        """
-        result = True
-        # Get schema information from pg_namespace
-        sql = "copy (select count(*) from pg_namespace where nspname = '%s') to stdout;" % schema
-        status, output = commands.getstatusoutput("%s \"%s\"" % (self.queryCmdPrefix, sql))
-        if status != 0 or int(output) > 1:
-            logmgr.recordError(LOG_MODULE,
-                               "Failed to check schema \"%s\" from pg_namespace" % schema)
-            result = False
-        elif output != "1":
-            # Create the schema for data import
-            sql = "create schema %s;" % schema
-            status, output = commands.getstatusoutput("%s \"%s\"" % (self.queryCmdPrefix, sql))
-            if status != 0 or output.upper() != "CREATE SCHEMA":
-                logmgr.recordError(LOG_MODULE, "Failed to create schema \"%s\"" % schema)
-                result = False
-        return result
+    def StartDataImport(self):
+        logmgr.recordError(LOG_MODULE, "server is starting ...")
+        self.initDatabase()
 
-    def checkBasicTable(self, schema, tableName, tableDefine):
-        """
-        function : Check whether the basic table exists, if not, create it
-        input : NA
-        output : result state
-        """
-        result = True
-        # Table to record the relation between metric item and query
-        column = ""
-        for d in tableDefine:
-            column += "%s %s," % (d, tableDefine[d])
-        column = column[0:-1]
+        register = ClusterRegisterThread('register', self.sourceDataPath, self.database)
+        register.start()
 
-        today = datetime.date.today()
-        thisMonday = today - datetime.timedelta(today.weekday())
-        nextYearEnd = (datetime.datetime(today.year + 2, 1, 1) - timedelta(days=1)).strftime("%Y-%m-%d")
+        self.dataImport()
 
-        sql = "CREATE TABLE " \
-              "IF NOT EXISTS %s.%s ( " \
-              "time timestamp, " \
+
+class ImportTask(object):
+    """
+    Constructor
+    """
+
+    def __init__(self, clusterName, rootPath, database):
+        self.clusterName = clusterName
+        self.rootPath = rootPath
+        self.database = database
+        self.tableMapping = self.loadTableMapping()
+        logmgr.recordError(self.clusterName, "init import thread.")
+
+    def loadTableMapping(self):
+        confPath = os.path.join(self.rootPath, self.clusterName, "conf",
+                                self.clusterName + "_" + varinfo.TABLE_MAP_FILE)
+        return jconf.GetTableMappingConf(confPath)
+
+    def runImport(self):
+        logmgr.recordError(self.clusterName, "start import thread.")
+        while True:
+            zipFileList = self.getAllZips()
+            if len(zipFileList) == 0:
+                continue
+            logmgr.recordError(self.clusterName, "received zip file list: %s" % (",".join(zipFileList)))
+            for zipFile in zipFileList:
+                self.dealZipFile(zipFile)
+            time.sleep(30)
+
+    def getAllZips(self):
+        zipFileList = []
+        clusterPath = os.path.join(self.rootPath, self.clusterName, "data")
+        for dirPath, dirNames, fileNames in os.walk(clusterPath):
+            for fileName in fileNames:
+                if fileName.endswith(".zip"):
+                    zipFileList.append(os.path.join(dirPath, fileName))
+        return zipFileList
+
+    def dealZipFile(self, zipFile):
+        fileList = self.unzipZipFile(zipFile)
+        logmgr.recordError(self.clusterName, "unzip data file list: %s, from zip file: %s"
+                           % (",".join(fileList), zipFile))
+        for dataFile in fileList:
+            self.copyIntoDatabase(dataFile)
+
+    @staticmethod
+    def unzipZipFile(zipFile):
+        (path, fileName) = os.path.split(zipFile)
+        zipFileOpe = zipfile.ZipFile(zipFile)
+        dirAndFileList = zipFileOpe.namelist()
+        fileList = [os.path.join(path, element) for element in dirAndFileList if str(element).endswith(".log")]
+        zipFileOpe.extractall(path)
+        os.remove(zipFile)
+        return fileList
+
+    def copyIntoDatabase(self, dataFile):
+        metricName = os.path.split(dataFile)[0].split("/")[-1]
+        tableName = "%s.%s" % (self.clusterName, self.tableMapping[metricName]['table']['name'])
+        sql = "copy %s from '%s' delimiter '|';" % (tableName, dataFile)
+        try:
+            logmgr.recordError(self.clusterName, "execute copy sql: %s" % sql)
+            (status, result, err_output) = commander.executeSqlOnLocalhost(str(sql), database=self.database)
+            if status != varinfo.PGRES_COMMAND_OK:
+                logmgr.recordError(LOG_MODULE, "Copy to database failed, cluster: %s, query: %s, output: %s" %
+                                   (self.clusterName, sql, err_output))
+        except Exception as e:
+            logmgr.recordError(LOG_MODULE, "exception occur while execute SQL: %s. exception: %s" % (sql, e), "ERROR")
+
+
+lock = threading.Lock()
+registerFlag = ""  # type: str
+
+
+class ClusterRegisterThread(Thread):
+    def __init__(self, name, rootPath, database):
+        super(ClusterRegisterThread, self).__init__()
+        self.name = name
+        self.rootPath = rootPath
+        self.database = database
+        logmgr.recordError(self.name, "init register thread.")
+
+    def run(self):
+        logmgr.recordError(self.name, "start register thread.")
+        global registerFlag
+        while True:
+            time.sleep(60)
+            registerConfList = self.listRegisterConf()
+            if len(registerConfList) == 0:
+                logmgr.recordError(self.name, "not found new cluster register on server.")
+                continue
+            logmgr.recordError(self.name, "found new cluster, received conf file %s." % (",".join(registerConfList)))
+
+            from itertools import groupby
+            groupedConfList = groupby(registerConfList, key=lambda x: (str(x).rsplit("_")[0]))
+
+            for (clusterName, confList) in groupedConfList:
+                confList = sorted(confList)
+                if not self.verifyConfList(confList):
+                    return
+                self.registerCluster(clusterName, confList)
+                self.archiveRegisterConfList(confList, clusterName)
+                while registerFlag != "":
+                    logmgr.recordError(self.name, "wait for cluster: %s finishing register" % registerFlag)
+                    time.sleep(1)
+                self.markRegisterFlag(clusterName)
+
+    def registerCluster(self, clusterName, confList):
+        logmgr.recordError(self.name, "init schema, table and directory for cluster: %s." % clusterName)
+        tableMappingFile = confList[1]
+        self.initSchemaAndTable(clusterName, tableMappingFile)
+        hostListFile = confList[0]
+        self.initDir(clusterName, hostListFile)
+
+    def listRegisterConf(self):
+        dirAndFileList = os.listdir(self.rootPath)
+        configFileList = [element for element in dirAndFileList if str(element).endswith(".json")]
+        return configFileList
+
+    @staticmethod
+    def verifyConfList(confList):
+        if len(confList) != 2:
+            return False
+        if str(confList[0]).split("_")[-1] != "hostlist.json":
+            return False
+        if str(confList[1]).split("_")[-1] != "tablemapping.json":
+            return False
+        return True
+
+    def initSchemaAndTable(self, clusterName, tableMappingFile):
+        self.initSchema(clusterName)
+        self.initTable(clusterName, tableMappingFile)
+
+    def initDir(self, clusterName, hostListFile):
+        commander.mkDirsWithMod(os.path.join(self.rootPath, clusterName),
+                                stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+
+        commander.mkDirsWithMod(os.path.join(self.rootPath, clusterName, "conf"),
+                                stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+
+        dataDir = os.path.join(self.rootPath, clusterName, "data")
+        commander.mkDirsWithMod(dataDir,
+                                stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+
+        hostList = jconf.GetHostListConf(os.path.join(self.rootPath, hostListFile))
+        for host in hostList:
+            commander.mkDirsWithMod(os.path.join(dataDir, host),
+                                    stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+
+    @staticmethod
+    def markRegisterFlag(clusterName):
+        global registerFlag
+        try:
+            lock.acquire()
+            registerFlag = clusterName
+        finally:
+            lock.release()
+
+    def initSchema(self, clusterName):
+        sql = "select count(*) from pg_namespace where nspname = '%s'" % clusterName
+        (status, output) = commander.runGsqlCommand(sql, database=self.database)
+        if status != 0:
+            logmgr.recordError(self.name, "Failed to check schema %s exists, err: %s" % (clusterName, output), "PANIC")
+        if int(output) != 0:
+            logmgr.recordError(self.name, "schema %s already exists, no need to create." % clusterName)
+            return
+        logmgr.recordError(self.name, "create schema: %s for cluster: %s " % (clusterName, clusterName))
+        sql = "create schema %s" % clusterName
+        (status, output) = commander.runGsqlCommand(sql, database=self.database)
+        if status != 0:
+            logmgr.recordError(self.name, "Failed to create schema %s, err: %s" % (clusterName, output), "PANIC")
+
+    def initTable(self, clusterName, tableMappingFile):
+        tableMappingList = jconf.GetTableMappingConf(os.path.join(self.rootPath, tableMappingFile))
+        begin = datetime.date.today()
+        end = begin + datetime.timedelta(days=90)
+        for metricName in tableMappingList:
+            self.createTable(clusterName, tableMappingList[metricName]["table"], begin, end)
+
+    def createTable(self, schema, tableMapping, begin, end):
+        tableName = tableMapping["name"]
+        logmgr.recordError(self.name, "create table: %s.%s in database: %s" % (schema, tableName, self.database))
+
+        tableDefine = tableMapping["define"]
+        columns = ""
+        for column in tableDefine:
+            columns += "%s %s," % (column, tableDefine[column])
+        columns = columns[0:-1]
+
+        sql = "CREATE TABLE IF NOT EXISTS " \
+              "%s.%s " \
+              "(time timestamp, " \
               "hostname text, " \
               "instance text, " \
               "%s ) " \
-              "PARTITION BY RANGE (time)" \
-              "( PARTITION p START (\'%s\') END (\'%s\') EVERY (\'7 Days\'));" \
-              % (schema, tableName, column, thisMonday, nextYearEnd)
-        status, output = commands.getstatusoutput("%s \"%s\"" % (self.queryCmdPrefix, sql))
+              "PARTITION BY RANGE (time) " \
+              "( PARTITION p START (\'%s\') END (\'%s\') EVERY (\'1 Days\'));" \
+              % (schema, tableName, columns, begin, end)
 
-        if status != 0 or "ERROR" in output.upper() or (output and "CREATE TABLE" not in output.upper()):
-            logmgr.recordError(LOG_MODULE, "Failed to check basic table \"%s\" err: %s" % (tableName, output))
-            result = False
-        return result
+        (status, output) = commander.runGsqlCommand(sql, database=self.database)
+        if status != 0 or output.split("\n")[-1] != "CREATE TABLE":
+            logmgr.recordError(self.name, "Failed to create table %s, err: %s" % (tableName, output))
 
-    def initSchemaAndTable(self, cluster):
-        self.checkSchema(cluster)
-        self.loadTableMapping(cluster)
-        if cluster not in self.tableMapping.keys():
-            return
-        tableList = self.tableMapping[cluster]
-        for tableKey in tableList:
-            tableName = tableList[tableKey]['table']['name']
-            self.checkBasicTable(cluster, tableName, tableList[tableKey]['table']['define'])
-
-    def copyDataIntoDatabase(self, cluster, file):
-        """
-        function : Copy data file into database
-        input : host name
-        output : NA
-        """
-        if os.path.getsize(file) == 0:
-            os.remove(file)
-            return
-        (path, filename) = os.path.split(file)
-        element = path.replace(self.sourceDataPath, "", 1).split('/')
-        element = [i for i in element if i != '']
-        currentCluster = element[0]
-        if currentCluster != cluster:
-            logmgr.recordError(LOG_MODULE, "Error log for cluster %s,source cluster %s, file %s" %
-                               (cluster, currentCluster, file))
-            return
-        type = element[4]
-        if type == "database":
-            instance = element[-2]
-        else:
-            instance = "system"
-        tableKey = element[-1]
-        nodename = element[2]
-
-        if tableKey not in self.tableMapping[cluster].keys():
-            logmgr.recordError(LOG_MODULE, "metric label %s has no table to store data " % tableKey)
-            return
-
-        dataFile = os.path.join(path, filename + '.tmp')
-        createDBData(file, nodename, instance, dataFile)
-        if not os.path.isfile(dataFile):
-            logmgr.recordError(LOG_MODULE, "metric data %s has not been created " % dataFile)
-            self.initSchemaAndTable(cluster)
-            return
-        # Use transactions to guarantee rollback in case of failure
-        tableName = "%s.%s" % (cluster, self.tableMapping[cluster][tableKey]['table']['name'])
-        sql = "start transaction;\n"
-        sql += "copy %s from '%s' delimiter '|';\n" % (tableName, dataFile)
-        sql += "commit;"
-        status, output = commands.getstatusoutput("%s \"%s\"" % (self.queryCmdPrefix, sql))
-        if status != 0 or "ROLLBACK" in output.upper():
-            logmgr.recordError(LOG_MODULE, "Copy to database failed cluster %s, query %s, output %s" %
-                               (cluster, sql, output))
-            return
-        # Get the number of rows of data into the database
-        output = output.lower()
-        idx = output.find('copy')
-        # Insert number of rows after the copy field
-        while idx >= 0:
-            output = output[idx + 5:]
-            idx = output[:output.find('\n')]
-            if idx.isdigit():
-                self.statistics["insert"] += int(idx)
-            # Multiple copies have multiple results
-            idx = output.find('copy')
-        os.remove(file)
-        os.remove(dataFile)
-
-    def getDealFileList(self, zipFile):
-        """
-        function : Decompress the log file
-        input : file name, file name with absolute path, storage path
-        output : result state
-        """
-        command = "zipinfo %s |grep \\\.log" % (zipFile)
-        status, output = commands.getstatusoutput(command)
-        if status != 0:
-            logmgr.recordError(LOG_MODULE, "Error get zipinfo file : %s ,errmsg : %s " % (zipFile, output))
-            return
-        tmpList = output.split('\n')
-        fileList = []
-        for l in tmpList:
-            m = l.split()
-            fileList.append(m[-1])
-        return fileList
-
-    def UnzipMetricData(self, zipFile):
-        """
-        function : Decompress the log file
-        input : file name, file name with absolute path, storage path
-        output : result state
-        """
-        result = True
-        path = os.path.dirname(zipFile)
-        if not os.path.isdir(path):
-            os.makedirs(path)
-        command = "unzip -o %s -d %s" % (zipFile, path)
-        status, output = commands.getstatusoutput(command)
-        if status != 0:
-            logmgr.recordError(LOG_MODULE, "Error unzip file : %s, err: %s" % (zipFile, output), "DEBUG")
-            result = False
-        return result
-
-    def dealZipFile(self, cluster, zipFile):
-        fileList = self.getDealFileList(zipFile)
-        baseDir = os.path.dirname(zipFile)
-        if self.UnzipMetricData(zipFile) is False:
-            return
-        for f in fileList:
-            fileName = os.path.join(baseDir, f)
-            self.copyDataIntoDatabase(cluster, fileName)
-
-    def checkAndDealData(self, cluster):
-        """
-        function : Access to the metric item and log file
-        input : host name, instance name, metric item, file path
-        output : NA
-        """
-        logmgr.recordError(LOG_MODULE, "Deal data start : %s %s " % (cluster, self.sourceDataPath), "DEBUG")
-        basedataPath = os.path.join(self.sourceDataPath, cluster, "data")
-        hostlist = os.listdir(basedataPath)
-        for h in hostlist:
-            checkPath = os.path.join(basedataPath, h)
-            if not os.path.isdir(checkPath):
-                continue
-            for z in os.listdir(checkPath):
-                if not z.endswith(".zip"):
-                    continue
-                zipFile = os.path.join(checkPath, z)
-                self.dealZipFile(cluster, zipFile)
-                os.remove(zipFile)
-
-    def RunDataImport(self, cluster):
-        self.checkAndInitDir(cluster)
-        self.initSchemaAndTable(cluster)
-        while True:
-            time.sleep(self.interval)
-            self.checkAndDealData(cluster)
-            if self.terminated is True:
-                break
-        return
-
-    def StartDataImport(self):
-        self.initDatabase()
-        threads = {}
-        for cluster in self.clusterList:
-            threads[cluster] = threading.Thread(target=self.RunDataImport, args=(cluster,))
-            threads[cluster].start()
-
-        for t in threads:
-            threads[t].join()
+    def archiveRegisterConfList(self, confList, cluster):
+        import shutil
+        for confFile in confList:
+            confFile = os.path.join(self.rootPath, confFile)
+            dst = os.path.join(self.rootPath, cluster, "conf")
+            shutil.move(confFile, dst)
 
 
 def RunDataImport():
