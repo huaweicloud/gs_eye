@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#-*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
 #######################################################################
 # Portions Copyright (c): 2021-2025, Huawei Tech. Co., Ltd.
 #
@@ -21,10 +21,12 @@ try:
     import time
     import commands
     import signal
-    import lib.common.cluster.gs_instance_manager as dbinfo
+    from threading import Thread
+    from lib.agent.gs_pusher import Pusher
     from lib.common import gs_constvalue as varinfo
+    from lib.common import gs_enumerate as enum
+    from lib.common.CommonCommand import CommonCommand as commander
     from lib.common import gs_envchecker as checker, gs_jsonconf as jconf, gs_logmanager as logmgr
-    import lib.agent.gs_pusher as pusher
     from lib.common.gs_threadpool import GaussThreadPool
 except Exception as e:
     sys.exit("FATAL: %s Unable to import module: %s" % (__file__, e))
@@ -32,99 +34,69 @@ except Exception as e:
 LOG_MODULE = 'METRIC Manager'
 
 
-def MetricMethod(method):
-    """
-    Method for metric generating
-    none:    default value, only has metric define, but not gathered
-    command: gathered by os tools, such as netstat, ps, top, etc.
-    query:   gathered by sql language, which need to be gathered from database
-    command_in_superuser: such as command, but need higher permission
-    log:     gathered from formatting log, such as /var/log/message or pg_log, it also need the log's access permission
-    """
-    methodDict = {
-        'none' : 0,
-        'query' : 1,
-        'command' : 2,
-        'command_in_superuser' : 3,
-        'log': 4
-    }
-    return methodDict[method]
-
-
-def QueryType(queryType):
-    """
-    Type for metric query execute location
-    none:    default value, meaning nothing
-    coordinator: gathered on coordinator, only enabled on coordinator node.
-    datanode:   gathered on datanode, only enabled on datanode node
-    instance: gathered on all instance which indicated coordinator and datanode, enabled on all nodes
-    """
-    queryTypeDict = {
-        'none' : 0,
-        'coordinator' : 1,
-        'datanode' : 2,
-        'instance' : 3
-    }
-    return queryTypeDict[queryType]
-
-
-def CollectorMethod(state):
-    """
-    State for metric
-    off:      default value, current metric item is not in scheduler, will not be scheduled
-    durative: meaning current metric item is in scheduler, will be scheduled in next interval
-    times:  meaning current metric item is in scheduler, will be scheduled in N times then change to off
-    dry:    only for testing
-    """
-    metricStateDict = {
-        'off' : 0,
-        'durative' : 1,
-        'times' : 2,
-        'dry' : 3
-    }
-    return metricStateDict[state]
-
-
-def ScheduleState(state):
-    """
-    Method for metric generating
-    none:    default value, only has metric define, but not gathered
-    command: gathered by os tools, such as netstat, ps, top, etc.
-    query:   gathered by sql language, which need to be gathered from database
-    command_in_superuser: such as command, but need higher permission
-    log:     gathered from formatting log, such as /var/log/message or pg_log, it also need the log's access permission
-    """
-    methodState = {
-        'offline' : 0,
-        'schedule' : 1,
-    }
-    return methodState[state]
-
-
 class MetricItem(object):
     """
     Constructor
     """
-    def __init__(self, itemDefine):
+
+    def __init__(self, itemDefine, metricSource):
         self.name, itemdict = itemDefine
-        self.method = MetricMethod(itemdict['type'])
-        self.interval = int(itemdict['collector']['interval'])
-        self.metricFunc = itemdict['metric_func']
-        if self.interval < varinfo.METRIC_MIN_ITEM_INTERVAL:
-            self.interval = varinfo.METRIC_DEFAULT_ITEM_INTERVAL
-        self.collectMethod = CollectorMethod(itemdict['collector']['method'])
+        self.metricType = enum.MetricMethod(itemdict['type'])
+
+        collector = itemdict['collector']
+        self.collectMethod = enum.CollectorMethod(collector['method'])
+        self.collectInterval = max(int(collector['interval']), varinfo.METRIC_MIN_ITEM_INTERVAL)
+        self.collectTimes = int(collector['times'])
+
+        metricFunc = itemdict['metric_func']
+        if self.metricType == enum.MetricMethod("query"):
+            self.queryInstance = metricFunc["query_type"]
+            self.queryDatabase = metricFunc["query_database"]
+            if ".sql" in metricFunc["query_string"]:
+                queryFile = os.path.join(varinfo.METRIC_ITEM_DIR, metricSource, metricFunc['query_string'])
+                self.queryString = commander.openFile(queryFile, "r")
+            else:
+                self.queryString = metricFunc["query_string"]
+
+        if self.metricType == enum.MetricMethod("command"):
+            if ".sh" in metricFunc["command"]:
+                commandFile = os.path.join(varinfo.METRIC_ITEM_DIR, metricSource, metricFunc['command'])
+                self.cmdCommand = "sh " + commandFile
+            elif ".py" in metricFunc["command"]:
+                commandFile = os.path.join(varinfo.METRIC_ITEM_DIR, metricSource, metricFunc['command'])
+                self.cmdCommand = "python " + commandFile
+            else:
+                self.cmdCommand = metricFunc["command"]
+            self.cmdOption = metricFunc["option"]
+            self.cmdFormation = metricFunc["formation"]
+
+        table = itemdict['table']
+        self.tableName = table["name"]
+        self.tableDefine = table["define"]
+
+
+class MetricJob(object):
+    """
+    Constructor
+    """
+
+    def __init__(self, metricItem, hostname):
+        self.metricItem = metricItem
+        self.hostname = hostname
+        self.collectMethod = metricItem.collectMethod
         self.lastSchedTick = 0
-        self.schedState = ScheduleState('offline')
+        self.interval = max(int(metricItem.collectInterval), varinfo.METRIC_MIN_ITEM_INTERVAL)
+        self.schedState = enum.ScheduleState('offline')
         self.logDir = ""
 
     def itemEnable(self):
-        self.collectMethod = CollectorMethod('durative')
+        self.collectMethod = enum.CollectorMethod('durative')
 
     def itemDisable(self):
-        self.collectMethod = CollectorMethod('off')
+        self.collectMethod = enum.CollectorMethod('off')
 
     def itemSchelule(self, threadPool, runProgress, clockTick):
-        if self.collectMethod == CollectorMethod('off'):
+        if self.collectMethod == enum.CollectorMethod('off'):
             return
         self.lastSchedTick = clockTick
         threadPool.Submit(runProgress, self.interval)
@@ -136,45 +108,36 @@ class MetricItem(object):
         return self.collectMethod
 
     def IsItemScheduled(self):
-        if self.schedState == ScheduleState('schedule'):
+        if self.schedState == enum.ScheduleState('schedule'):
             return True
         else:
             return False
 
 
-class DatabaseMetricItem(MetricItem):
+class DatabaseMetricJob(MetricJob):
     """
     Classify method to execute database metric item
     """
-    def __init__(self, itemclass, itemDefine, instanceInfo):
+
+    def __init__(self, metricItem, hostname, instance, database):
         """
         Constructor
         """
-        super(DatabaseMetricItem, self).__init__(itemDefine)
-        # metric type
-        self.queryType = QueryType(self.metricFunc['query_type'])
-        # metric string
-        if '.sql' in self.metricFunc['query_string']:
-            queryFile = os.path.join(varinfo.METRIC_ITEM_DIR, itemclass, self.metricFunc['query_string'])
-            self.queryString = open(queryFile, "r").read()
+        super(DatabaseMetricJob, self).__init__(metricItem, hostname)
+        self.instance = instance
+        self.database = database
+
+        queryInstance = self.metricItem.queryInstance
+        if enum.QueryType(queryInstance) == enum.QueryType(instance.instType) \
+                or enum.QueryType(queryInstance) == enum.QueryType("instance"):
+            self.schedState = enum.ScheduleState('schedule')
         else:
-            self.queryString = self.metricFunc['query_string']
-        # number of execution failures
-        self.failureCount = 0
-        tempFileName = ".tmp_gs_metric_" + self.name
-        self.tempfile = os.path.join(varinfo.METRIC_ITEM_DIR, itemclass, tempFileName)
-        self.instanceInfo = instanceInfo
-        database = itemDefine[1]['metric_func']['query_database']
-        self.queryCmd = "gsql -d %s" % database + " -p %s " % instanceInfo.port + " -f "
-        if self.queryType == QueryType(instanceInfo.instType) or self.queryType == QueryType("instance"):
-            self.schedState = ScheduleState('schedule')
-        else:
-            self.schedState = ScheduleState('offline')
-        logDir = os.path.join(varinfo.METRIC_DATA_BASE_DIR, 'database', instanceInfo.nodename, self.name)
-        self.dblog = logmgr.MetricLog(logDir, self.name)
-        self.updateQueryString()
+            self.schedState = enum.ScheduleState('offline')
+
+        logDir = os.path.join(varinfo.METRIC_DATA_BASE_DIR, 'database', instance.nodename, self.metricItem.name)
+        self.dblog = logmgr.MetricLog(logDir, self.metricItem.name)
         logmgr.recordError(LOG_MODULE, "new database metric added in instance %s: metric name: %s sched:%s, log path %s"
-                           % (instanceInfo.nodename, self.name, str(self.schedState), logDir))
+                           % (instance.nodename, self.metricItem.name, str(self.schedState), logDir))
 
     def query(self):
         """
@@ -182,72 +145,25 @@ class DatabaseMetricItem(MetricItem):
         input : NA
         output : result information
         """
-        status, output = commands.getstatusoutput(self.queryCmd + self.tempfile)
-        logmgr.recordError(LOG_MODULE, "get query result on node %s for item %s query %s"
-                           % (self.instanceInfo.nodename, self.name, self.queryCmd + self.tempfile), "DEBUG")
-        if status != 0 or not output:
-            logmgr.recordError(LOG_MODULE, "Failed to get query result on node %s for item %s, result %s"
-                               % (self.instanceInfo.nodename, self.name, output))
-            output = "[DBMetric]: " + output
-            self.failureCount += 1
-            if self.failureCount >= varinfo.METRIC_MAX_FAILURE:
-                # Query the instance status after five consecutive failures
-                self.state = dbinfo.getNodeState("DBMetric")
-        else:
-            # Refresh number of failed after successful query
-            self.failureCount = 0
-        output = output.replace("GS_LABEL_HEAD\\", "GS_LABEL_HEAD")
-        return output
-
-    def reorganizeQuery(self):
-        """
-        function : Parse the metric item file to get the valid sql
-        input : NA
-        output : valid sql
-        """
-        # Set the timeout period to avoid residual sql
-        sql = ""
-        for query in self.queryString.split(';'):
-            query = query.strip()
-            # Skip empty sql
-            if not query:
+        port = self.instance.port
+        queryString = self.metricItem.queryString
+        sqlList = queryString.strip().split(";")
+        sqlList = [element for element in sqlList if element != ""]
+        results = []
+        for sql in sqlList:
+            if str(sql).lower().startswith('set'):
                 continue
-            elif query.lower().startswith("set"):
-                sql += ("%s;\n" % query)
-            # Use copy to wrap the SQL to get the formatted data
-            elif query.lower().startswith("select"):
-                sql += ("copy (%s) to stdout delimiter '|';\n" %
-                        ("select 'GS_LABEL_HEAD' , * from (" + query + ") tmp"))
-            # Prevent command injection for abnormal sql
-            else:
-                logmgr.recordError(LOG_MODULE, "Invalid sql in file %s query %s" % (self.tempfile, query), "PANIC")
-        if sql:
-            sql = "set statement_timeout = %d;\n%s" % (self.interval * 1000, sql)
-        return sql
-
-    def createTempFile(self):
-        """
-        function : Create temporary file that are actually executed
-        input : NA
-        output : NA
-        """
-        # Separate the resulting data using delimiter
-        delimiter = ";\ncopy (select '%s') to stdout;" % (varinfo.DATA_TYPE_DELIMITER)
-        with open(self.tempfile, "w") as file:
-            file.write(self.queryString.replace(';', delimiter))
-        file.close()
-
-    def updateQueryString(self):
-        """
-        function : Check whether the metric item query string has been changed
-        input : NA
-        output : NA
-        """
-        queryString = self.reorganizeQuery()
-        if self.queryString != queryString:
-            self.queryString = queryString
-            # If there are changes, write the new query string to the temporary file
-            self.createTempFile()
+            try:
+                logmgr.recordError(self.metricItem.name, "execute metric sql: %s" % sql)
+                (status, result, err_output) = commander.executeSqlOnLocalhost(sql, port, self.database)
+                if status != varinfo.PGRES_TUPLES_OK:
+                    logmgr.recordError(LOG_MODULE, "Failed to execute SQL: %s." % sql + " Error:\n%s" % err_output)
+                else:
+                    results.append(result)
+            except Exception as e:
+                logmgr.recordError(LOG_MODULE, "exception occur while execute SQL: %s. exception: %s"
+                                   % (sql, e), "DEBUG")
+        return self.formatResult(results, self.instance.nodename)
 
     def runMetric(self):
         """
@@ -256,49 +172,51 @@ class DatabaseMetricItem(MetricItem):
         output : NA
         """
         logmgr.recordError(LOG_MODULE, "[%s], metric name:[%s], scheduled at clock %d "
-                           % (self.instanceInfo.nodename, self.name, self.GetLastSchedTick()), "DEBUG")
-        if not self.instanceInfo.checkNodeState("Main"):
+                           % (self.instance.nodename, self.metricItem.name, self.GetLastSchedTick()), "DEBUG")
+        if not self.instance.checkNodeState("Main"):
             return
-        if os.path.isfile(self.tempfile) and os.path.getsize(self.tempfile):
-            output = self.query()
+        output = self.query()
+        if output is not None and output != "":
             self.dblog.logWrite(output)
-        # The temporary file does not exist or is empty, write for next schedule
-        else:
-            return
+
+    def formatResult(self, results, instanceId):
+        output = ""
+        now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        for result in results:
+            for row in result:
+                if str(row).lower().startswith("set"):
+                    continue
+                for index in range(len(row)):
+                    cell = row[index]
+                    cell = cell.replace("|", "$$")
+                    cell = cell.replace("\n", " ")
+                    row[index] = cell
+                data = "|".join(row)
+                output += ("%s|%s|%s|" % (now, self.hostname, instanceId) + data + "\n")
+        return output
 
 
-class SystemMetricItem(MetricItem):
+class SystemMetricJob(MetricJob):
     """
     Classify method to execute system metric item
     """
-    def __init__(self, itemclass, itemdict):
+
+    def __init__(self, metricItem, hostname):
         """"
         Constructor
         """
-        super(SystemMetricItem, self).__init__(itemdict)
-        # metric string
-        if '.sh' in self.metricFunc['command'] or '.py' in self.metricFunc['command']:
-            cmdFile = os.path.join(varinfo.METRIC_ITEM_DIR, itemclass, self.metricFunc['command'])
-            self.metricCmd = open(cmdFile, "r").read()
-        else:
-            self.metricCmd = self.metricFunc['command']
-        self.cmdOption = self.metricFunc['option']
-        self.outputFormation = self.metricFunc['formation']
-        # number of execution failures
-        self.failureCount = 0
-        tempFileName = ".tmp_gs_metric_" + self.name
-        self.tempfile = os.path.join(varinfo.METRIC_ITEM_DIR, itemclass, tempFileName)
-        self.schedState = ScheduleState('schedule')
-        logDir = os.path.join(varinfo.METRIC_DATA_BASE_DIR, 'system', self.name)
-        self.dblog = logmgr.MetricLog(logDir, self.name)
+        super(SystemMetricJob, self).__init__(metricItem, hostname)
+        self.schedState = enum.ScheduleState('schedule')
+        logDir = os.path.join(varinfo.METRIC_DATA_BASE_DIR, 'system', self.metricItem.name)
+        self.dblog = logmgr.MetricLog(logDir, self.metricItem.name)
         logmgr.recordError(LOG_MODULE, "new system metric added in metric name: %s sched:%s, log path %s"
-                           % (self.name, str(self.schedState), logDir))
+                           % (self.metricItem.name, str(self.schedState), logDir))
 
     def commandCheck(self):
         """"
         check Command has dangerous command
         """
-        #TODO
+        # TODO
         return True
 
     def runCommand(self):
@@ -307,21 +225,14 @@ class SystemMetricItem(MetricItem):
         input : NA
         output : result information
         """
-        # Some path information may be required by the system items
-        if len(self.outputFormation) > 0 :
-            cmd = self.metricCmd + " " + self.cmdOption + '|' + self.outputFormation
-        else:
-            cmd = self.metricCmd + " " + self.cmdOption
-        status, output = commands.getstatusoutput(cmd)
-        if status != 0 or not output:
-            logmgr.recordError("SysMetric", "Failed to get shell result for item \"%s\", err: %s"
-                               % (self.name, output))
-            output = "[SysMetric]: " + output
-        else :
-            output = varinfo.LABEL_HEAD_PREFIX + '|' + output
-            output = output.replace("\n", "\n" + varinfo.LABEL_HEAD_PREFIX + '|')
-            output = varinfo.DATA_TYPE_DELIMITER + "\n" + output + "\n" + varinfo.DATA_TYPE_DELIMITER
-        return output
+        metricItem = self.metricItem
+        cmd = metricItem.cmdCommand + " " + metricItem.cmdOption + '|' + metricItem.cmdFormation
+        # logmgr.recordError(metricItem.name, "execute metric command: %s" % cmd)
+        status, result = commands.getstatusoutput(cmd)
+        if status != 0:
+            logmgr.recordError(LOG_MODULE, "Failed to execute command: %s." % cmd + " Error:\n%s" % result)
+            return ""
+        return self.formatResult(result, "system")
 
     def runMetric(self):
         """
@@ -330,17 +241,30 @@ class SystemMetricItem(MetricItem):
         output : NA
         """
         logmgr.recordError(LOG_MODULE, "[SYS], metric name:[%s], scheduled at clock %d "
-                           % (self.name, self.GetLastSchedTick()), "DEBUG")
+                           % (self.metricItem.name, self.GetLastSchedTick()), "DEBUG")
         output = self.runCommand()
-        self.dblog.logWrite(output)
+        if output is not None and output != "":
+            # logmgr.recordError(self.metricItem.name, "command result: %s" % output)
+            self.dblog.logWrite(output)
+
+    def formatResult(self, result, instanceId):
+        output = ""
+        now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        result = result.split("\n")
+        for row in result:
+            output += ("%s|%s|%s|" % (now, self.hostname, instanceId) + row + "\n")
+        return output
 
 
 class MetricManager():
     """
     function:
     """
-    def __init__(self, metricMgrConfjson, itemDirList, instanceList):
+
+    def __init__(self, metricMgrConfjson, itemDirList, options):
         self.maxThreads = int(metricMgrConfjson['max_threads'])
+        self.clusterName = metricMgrConfjson['pusher']["cluster_name"]
+        self.metricMgrConfjson = metricMgrConfjson
         self.gsMatricPool = GaussThreadPool(self.maxThreads)
         self.metricConfig = ""
         self.clockcount = 0
@@ -349,14 +273,16 @@ class MetricManager():
         self.pushConfigFlag = 1
         self.itemDirList = itemDirList
         self.itemList = []
+        self.jobList = []
         self.itemListDict = {}
-        self.instanceList = instanceList
+        self.hostname = options.hostname
+        self.instanceList = options.dbNodeList
         self.databases = self.getDatabases()
         signal.signal(signal.SIGINT, lambda signal, frame: self._signal_handler())
         signal.signal(signal.SIGUSR2, lambda signal, frame: self._metric_handler())
         self.terminated = False
         if "pusher" in metricMgrConfjson.keys():
-            self.pusher = pusher.Pusher(metricMgrConfjson['pusher'])
+            self.pusher = Pusher(metricMgrConfjson['pusher'])
 
     def _signal_handler(self):
         self.terminated = True
@@ -416,81 +342,138 @@ class MetricManager():
         return database
 
     def getDatabases(self):
-        status, output = commands.getstatusoutput("gsql -d postgres -p 25308 -c 'select datname from pg_database'")
-        if status != 0 or not output:
-            logmgr.recordError("SysMetric", "Failed to query all database")
-        array = output.split("\n")[2:-2]
-        database = [element.strip() for element in array if "template1" not in element and "template0" not in element]
+        firstPrimaryInstance = [element for element in self.instanceList if "master" in element.datadir][0]
+        querySql = "select datname from pg_database"
+        result = []
+        try:
+            (status, result, err_output) = commander.executeSqlOnLocalhost(querySql, firstPrimaryInstance.port)
+            if status != varinfo.PGRES_TUPLES_OK:
+                raise Exception("Failed to execute SQL: %s." % querySql + " Error:\n%s" % err_output)
+            if len(result) == 0:
+                raise Exception("Failed to execute SQL: %s." % querySql + " Return record is null")
+        except Exception as e:
+            logmgr.recordError(LOG_MODULE, "exception occur while execute SQL: %s. exception: %s"
+                               % (querySql, e), "DEBUG")
+        database = [str(element[0]).strip() for element in result if
+                    "template1" not in element and "template0" not in element]
         return database
 
-    def initMetricItem(self, itemClass, metriclist):
-        metricNameList = map(lambda metricItem: metricItem.name, self.itemList)
-        for itemdict in metriclist.keys():
-            item = metriclist[itemdict]
-            if itemdict in metricNameList:
+    def initMetricItem(self, metricList, metricSource):
+        logmgr.recordError(LOG_MODULE, "transfer metric conf to item")
+        nameList = map(lambda metricItem: metricItem.name, self.itemList)
+        for itemName in metricList.keys():
+            if itemName in nameList:
                 continue
-            if MetricMethod(item['type']) == MetricMethod('query'):
-                queryType = self.initQueryType(item)
-                queryDatabase = self.initDatabaseList(item)
-                for inst in self.instanceList:
-                    if inst.instType not in queryType:
-                        continue
-                    for database in queryDatabase:
-                        item["metric_func"]["query_database"] = database
-                        self.itemList.append(DatabaseMetricItem(itemClass, (itemdict, item), inst))
-            elif MetricMethod(item['type']) == MetricMethod('command'):
-                self.itemList.append(SystemMetricItem(itemClass, (itemdict, item)))
+            item = metricList[itemName]
+            self.itemList.append(MetricItem((itemName, item), metricSource))
 
-    def updateItemDict(self, metriclist):
-        for item in metriclist.keys():
-            if item not in self.itemListDict.keys():
-                self.itemListDict[item] = {'table' : metriclist[item]['table']}
+    def createJob(self, metricItem):
+        for instance in self.instanceList:
+            for database in self.databases:
+                self.jobList.append(DatabaseMetricJob(metricItem, self.hostname, instance, database))
 
-    def pushConfig(self):
-        if self.pushConfigFlag == 0:
-            return
-        tableMapFile = os.path.join(varinfo.PUSHER_BUFFER_PATH, varinfo.TABLE_MAP_FILE)
-        jconf.SaveJsonConf(self.itemListDict, tableMapFile)
-        flag1 = self.pusher.pusher.pushFile(tableMapFile, pusher.PusherFileType('config'), 10)
-        hostListFile = os.path.join(varinfo.PUSHER_BUFFER_PATH, varinfo.HOST_LIST_FILE)
-        flag2 = self.pusher.pusher.pushFile(hostListFile, pusher.PusherFileType('config'), 10)
-        if flag1 and flag2:
-            self.pushConfigFlag = 0
+    def initMetricJob(self):
+        logmgr.recordError(LOG_MODULE, "init metric job base on metric item")
+        jobNameList = map(lambda metricJob: metricJob.metricItem.name, self.jobList)
+        for metricItem in self.itemList:
+            if metricItem.name in jobNameList:
+                continue
+            if metricItem.collectMethod == "off":
+                continue
+            if metricItem.metricType == enum.MetricMethod("command"):
+                self.jobList.append(SystemMetricJob(metricItem, self.hostname))
+            elif metricItem.metricType == enum.MetricMethod("query"):
+                self.createJob(metricItem)
+            else:
+                logmgr.recordError(LOG_MODULE, "init metric job found illegal metric type: %s" % metricItem.metricType)
 
     def itemListRefresh(self):
         if self.itemRefreshflag == 0:
             return
-        for dir in self.itemDirList:
-            checkpath = os.path.join(varinfo.METRIC_ITEM_DIR, dir, "metricdef.json")
+        logmgr.recordError(LOG_MODULE, "start fresh metric item")
+        for directory in self.itemDirList:
+            checkpath = os.path.join(varinfo.METRIC_ITEM_DIR, directory, "metricdef.json")
             if not os.path.isfile(checkpath):
                 logmgr.recordError(LOG_MODULE, "Failed to get json in %s" % checkpath)
                 continue
             metriclist = jconf.MetricItemListGet(checkpath)
-            self.initMetricItem(dir, metriclist)
-            self.updateItemDict(metriclist)
+            self.initMetricItem(metriclist, directory)
+            self.initMetricJob()
         self.itemRefreshflag = 0
+        logmgr.recordError(LOG_MODULE, "end fresh metric item")
 
     def itemListSchedule(self):
         currentClock = self.getClockTick()
-        for item in self.itemList:
-            if item.GetItemCollectMethod() == CollectorMethod('off'):
+        if currentClock % 10 == 0:
+            logmgr.recordError(LOG_MODULE, "current clock is %d" % currentClock)
+        for job in self.jobList:
+            if job.GetItemCollectMethod() == enum.CollectorMethod('off'):
                 continue
-            if item.IsItemScheduled() is False:
+            if job.IsItemScheduled() is False:
                 continue
-            if currentClock - item.GetLastSchedTick() >= item.interval:
-                item.itemSchelule(self.gsMatricPool, item.runMetric(), currentClock)
+            if currentClock - job.GetLastSchedTick() >= job.interval:
+                job.itemSchelule(self.gsMatricPool, job.runMetric(), currentClock)
 
-    def startManager(self):
-        logmgr.recordError(LOG_MODULE, "Starting metric manager")
+    def dataMetric(self):
+        logmgr.recordError(LOG_MODULE, "start data metric.")
         while self.stopflag == 0:
             self.clockTick()
             self.itemListRefresh()
-            self.pushConfig()
             self.itemListSchedule()
-            self.pusher.PusherSchedule(self.clockcount)
             if self.terminated == 1:
                 self.gsMatricPool.CleanPool(False)
                 break
+
+    def loadTableMap(self):
+        for directory in self.itemDirList:
+            checkPath = os.path.join(varinfo.METRIC_ITEM_DIR, directory, "metricdef.json")
+            if not os.path.isfile(checkPath):
+                logmgr.recordError(LOG_MODULE, "Failed to get json in %s" % checkPath)
+                continue
+            metricList = jconf.MetricItemListGet(checkPath)
+            for item in metricList.keys():
+                if item not in self.itemListDict.keys():
+                    self.itemListDict[item] = {'table': metricList[item]['table']}
+
+    def registerOnServer(self):
+        logmgr.recordError(LOG_MODULE, "start register on server ...")
+        pushConfig = self.metricMgrConfjson["pusher"]
+        targetPath = pushConfig["base_url"]
+        clusterPath = targetPath + "/" + pushConfig['cluster_name']
+        if self.pusher.pusher.checkUrlOption(clusterPath):
+            logmgr.recordError(LOG_MODULE, "found cluster path: %s on server, no need to register" % clusterPath)
+            return
+        self.loadTableMap()
+        tableMapFile = os.path.join(varinfo.PUSHER_BUFFER_PATH, self.clusterName + "_" + varinfo.TABLE_MAP_FILE)
+        jconf.SaveJsonConf(self.itemListDict, tableMapFile)
+        self.pusher.pusher.pushFileToServer(tableMapFile, targetPath, 10)
+        hostListFile = os.path.join(varinfo.PUSHER_BUFFER_PATH, self.clusterName + "_" + varinfo.HOST_LIST_FILE)
+        self.pusher.pusher.pushFileToServer(hostListFile, targetPath, 10)
+        logmgr.recordError(LOG_MODULE, "successfully to push file: %s and %s to server" % (tableMapFile, hostListFile))
+
+    def startManager(self):
+        logmgr.recordError(LOG_MODULE, "agent is starting ...")
+        self.registerOnServer()
+
+        pusher = PushThread('push', self.metricMgrConfjson["pusher"])
+        pusher.start()
+
+        self.dataMetric()
+
+
+class PushThread(Thread):
+    def __init__(self, name, metricMgrConfjson):
+        super(PushThread, self).__init__()
+        self.name = name
+        self.metricMgrConfjson = metricMgrConfjson
+        self.pusher = Pusher(metricMgrConfjson)
+        logmgr.recordError(self.name, "init push thread.")
+
+    def run(self):
+        logmgr.recordError(self.name, "start push thread.")
+        while True:
+            time.sleep(self.metricMgrConfjson["interval"])
+            self.pusher.PusherSchedule()
 
 
 def RunMetricManager():
@@ -505,8 +488,8 @@ def RunMetricManager():
     options.SetAppName('Agent')
     options.initParameter()
     options.checkParameter()
-    options.SaveClusterHostList()
     metricMgrConfjson = jconf.GetMetricManagerJsonConf(os.path.join(varinfo.METRIC_CONFIG, "client_conf.json"))
+    options.SaveClusterHostList(metricMgrConfjson['GlobalManager']['pusher']["cluster_name"])
     itemDirList = ['metric_default', 'metric_user_define']
-    metricMgr = MetricManager(metricMgrConfjson['GlobalManager'], itemDirList, options.dbNodeList)
+    metricMgr = MetricManager(metricMgrConfjson['GlobalManager'], itemDirList, options)
     metricMgr.startManager()
