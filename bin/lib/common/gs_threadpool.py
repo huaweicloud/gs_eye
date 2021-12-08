@@ -70,7 +70,7 @@ class GaussThreadPool():
         while self.exitFlag != 0:
             self.queueLock.acquire()
             if len(self.workQueue) != 0:
-                myJob, timeout  = self.workQueue[0]
+                myJob, timeout = self.workQueue[0]
                 self.workQueue.remove(self.workQueue[0])
                 self.queueLock.release()
                 myJob()
