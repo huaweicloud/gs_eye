@@ -145,13 +145,13 @@ class RunEnvironment(Parameter):
         self.dbNodeList = self.coordinator + self.datanode
         self.clusterInfo = clusterInfo
 
-    def SaveClusterHostList(self):
+    def SaveClusterHostList(self, clusterName):
         """
         Save cluster information
         """
         # Get cluster information from library lib.cluster.dbinfo
         host_list = {"host_list" : self.hostlist}
-        hostListFile = os.path.join(varinfo.PUSHER_BUFFER_PATH, varinfo.HOST_LIST_FILE)
+        hostListFile = os.path.join(varinfo.PUSHER_BUFFER_PATH, clusterName + "_" + varinfo.HOST_LIST_FILE)
         jconf.SaveJsonConf(host_list, hostListFile)
 
     def checkParameter(self):
