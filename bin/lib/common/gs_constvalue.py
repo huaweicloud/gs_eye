@@ -87,6 +87,29 @@ MATRIC_LOGBASE = os.path.join(os.environ.get('GAUSSLOG'), "gs_metricdata")
 METRIC_DATA_BASE_DIR = os.path.join(MATRIC_LOGBASE, "data")
 PUSHER_BUFFER_PATH = os.path.join(MATRIC_LOGBASE, "pusherbuffer")
 METRIC_RUNNING_LOG = os.path.join(MATRIC_LOGBASE, "runlog")
-TABLE_MAP_FILE = "tablemap.json"
-HOST_LIST_FILE = "host_list.json"
+TABLE_MAP_FILE = "tablemapping.json"
+HOST_LIST_FILE = "hostlist.json"
 METRIC_SIGFLAG_FILE = os.path.join(METRIC_APP_BASE, "metric_flag")
+
+PORT_COORDINATOR = 25308
+
+# empty query string was executed
+PGRES_EMPTY_QUERY = 0
+# a query command that doesn't return anything was executed properly by the backend, such as set, create table
+PGRES_COMMAND_OK = 1
+# a query command that returns tuples was executed properly by the backend, PGresult contains the result tuples
+PGRES_TUPLES_OK = 2
+# Copy Out data transfer in progress
+PGRES_COPY_OUT = 3
+# Copy In data transfer in progress
+PGRES_COPY_IN = 4
+# an unexpected response was recv'd from the backend
+PGRES_BAD_RESPONSE = 5
+# notice or warning message
+PGRES_NONFATAL_ERROR = 6
+# query failed
+PGRES_FATAL_ERROR = 7
+# Copy In/Out data transfer in progress
+PGRES_COPY_BOTH = 8
+# single tuple from larger resultset
+PGRES_SINGLE_TUPLE = 9

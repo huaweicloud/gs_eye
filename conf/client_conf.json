@@ -8,7 +8,7 @@
       "method" : "nokeep",
       "protocal" : "http",
       "base_url" : "http://10.185.180.235:8090/metricdata/",
-      "interval" : 10,
+      "interval" : 120,
       "cluster_name" : "cluster2"
     }
   }

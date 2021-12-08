@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#-*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
 #######################################################################
 # Portions Copyright (c): 2021-2025, Huawei Tech. Co., Ltd.
 #
@@ -44,12 +44,12 @@ def PusherProtocal(protocal):
     bypass: using local message queue, which is realized by gsql, pushing the metric data at real time
     """
     protocalDict = {
-        'http' : 1,
-        'ftp' : 2,
-        'sftp' : 3,
-        'local' : 4,
-        'sockServer' : 5,
-        'bypass' : 6
+        'http': 1,
+        'ftp': 2,
+        'sftp': 3,
+        'local': 4,
+        'sockServer': 5,
+        'bypass': 6
     }
     return protocalDict[protocal]
 
@@ -62,8 +62,8 @@ def PusherMethod(method):
     incremental:   local data will be kept for a long time set by log_keep_time
     """
     methodDict = {
-        'nokeep' : 1,
-        'incremental' : 2,
+        'nokeep': 1,
+        'incremental': 2,
     }
     return methodDict[method]
 
@@ -76,8 +76,8 @@ def PusherFileType(type):
     incremental:   local data will be kept for a long time set by log_keep_time
     """
     filetype = {
-        'data' : 1,
-        'config' : 2,
+        'data': 1,
+        'config': 2,
     }
     return filetype[type]
 
@@ -128,6 +128,7 @@ class Pusher:
         for fileprefix in self.pushFileList.keys():
             filepath = os.path.join(varinfo.PUSHER_BUFFER_PATH, fileprefix + ".zip")
             if self.pusher.pushData(filepath, timeout) is True:
+                logmgr.recordError(LOG_MODULE, "successfully to push data: %s" % filepath)
                 self.pushFileList.pop(fileprefix)
                 os.remove(filepath)
                 logmgr.recordError("Pusher", "rm file %s" % filepath, "DEBUG")
@@ -141,16 +142,16 @@ class Pusher:
             os.remove(self.pushStateFile)
             logmgr.recordError("Pusher", "rm state file %s" % self.pushStateFile, "DEBUG")
 
-    def PusherSchedule(self, clock):
-        if clock % self.interval == 0:
-            self.generatePusherData()
-            self.PushData()
+    def PusherSchedule(self):
+        self.generatePusherData()
+        self.PushData()
 
 
 class PusherByHttp:
     """
     Classify method to push logs to remote server
     """
+
     def __init__(self, url, clusterName):
         """
         Constructor
@@ -233,6 +234,22 @@ class PusherByHttp:
             logmgr.recordError(LOG_MODULE, "The archive file does not exist May be deleted by log manager")
             return True
 
+    def pushFileToServer(self, sourceFile, url, timeout):
+        """
+        function : Push archive files to remote server
+        input : NA
+        output : NA
+        """
+        if not self.checkUrlOption(url):
+            return False
+        command = "curl -m %d -T %s %s" % (timeout, sourceFile, url)
+        status, output = commands.getstatusoutput(command)
+        # It will be redone next time if failed to push
+        if status != 0 or ("<title>" in output and "201 Created" not in output):
+            logmgr.recordError(LOG_MODULE, "Failed to curl \"%s\" to \"%s\" err: %s" % (sourceFile, url, output))
+            return False
+        return True
+
     def pushData(self, file, timeout):
         """
         function : Push archive files to remote server
@@ -246,6 +263,7 @@ class PusherByLocal:
     """
     Classify method to push logs to local global directory
     """
+
     def __init__(self):
         """
         Constructor
@@ -265,6 +283,7 @@ class PusherByFtp:
     """
     Classify method to push logs to remote server
     """
+
     def __init__(self, pushMethod, interval, options):
         """
         Constructor
@@ -284,6 +303,7 @@ class PusherBySockServer:
     """
     Classify method to push metric to self socket server
     """
+
     def __init__(self, pushMethod, interval, options):
         """
         Constructor

@@ -21,13 +21,10 @@ try:
     import imp
     imp.reload(sys)
     sys.setdefaultencoding('utf8')
-    import json
     import time
     import lib.common.gs_constvalue as varinfo
-    import commands
     import threading
     import glob
-    import fcntl
     import gs_jsonconf as jconf
 except Exception as e:
     sys.exit("FATAL: %s Unable to import module: %s" % (__file__, e))
@@ -64,18 +61,19 @@ def StartLogManager(runMode):
     _logs = RunningLog(runMode)
 
 
-def recordError(module, msg, level = "LOG"):
+def recordError(module, msg, level="LOG"):
     """
     function : Record script running error
     input : the function caller, error massage, error detail
     output : NA
     """
+    global _logs
     # Prevent too long error messages
     error = "[%s][%s]: %s" % (level, module, msg)
     if len(error) > varinfo.DATA_LEN_ERROR:
         error = error[:varinfo.DATA_LEN_ERROR]
     if not _logs:
-        print error
+        print(error)
         if "PANIC" in level:
             sys.exit()
         return
@@ -166,7 +164,7 @@ class MetricLog:
         """
         if self.isLogNeedSwitch():
             self.logSwitch()
-        self.log.write(message + "\n")
+        self.log.write(message)
         self.log.flush()
 
     def logWriteWithoutSwitch(self, message):
@@ -175,12 +173,8 @@ class MetricLog:
         input : log message
         output : NA
         """
-        try:
-            fcntl.lockf(self.log, fcntl.LOCK_EX)
-            self.log.write(message + "\n")
-            self.log.flush()
-        finally:
-            fcntl.flock(self.log, fcntl.LOCK_UN)
+        self.log.write(message)
+        self.log.flush()
 
     def logWriteAndTimer(self, message):
         """
@@ -198,9 +192,7 @@ class MetricLog:
         input : log message
         output : NA
         """
-        timer = varinfo.RECORD_BEGIN_DELIMITER + \
-                "\n[timer: " + time.strftime(varinfo.RECORD_TIMELABEL_FORMAT, time.localtime()) + "]\n"
-        self.logWriteWithoutSwitch(timer + message)
+        self.logWriteWithoutSwitch(message)
 
     def __del__(self):
         """
@@ -294,9 +286,9 @@ class RunningLog:
         # If the log directory is deleted, create it here
         if not os.path.isdir(self.curFileBase):
             os.makedirs(self.curFileBase)
-        self.file = os.path.join(self.curFileBase + time.strftime(
+        self.curFile = os.path.join(self.curFileBase + time.strftime(
             varinfo.METRIC_LOGFILE_FORMAT, time.localtime()))
-        self.log = open(self.file, "w+")
+        self.log = open(self.curFile, "w+")
 
     def logFlush(self, message):
         """
