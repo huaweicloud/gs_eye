@@ -180,7 +180,7 @@ function run() {
         echo "Warning: ${RUNMODE}.pid file is missing, but ${MET_BIN} is already in progress"
     else
         cd ${BIN_HOME}
-        nohup python ${BIN_HOME}/${MET_BIN} ${MET_OPT} 1>${GAUSSLOG}/gs_metricdata/runlog/start.log 2>&1 &
+        nohup python ${BIN_HOME}/${MET_BIN} ${MET_OPT} 1>../start.log 2>&1 &
         sleep 2
         pid=`ps ux | grep "${MET_BIN}" | grep -v -E 'grep|sh|source' | awk '{print $2}'`
         if [ "${pid}" != "" ]; then
