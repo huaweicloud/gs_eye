@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #-*- coding:utf-8 -*-
 #######################################################################
 # Portions Copyright (c): 2021-2025, Huawei Tech. Co., Ltd.
@@ -18,9 +18,6 @@
 try:
     import os
     import sys
-    import imp
-    imp.reload(sys)
-    sys.setdefaultencoding('utf8')
     import time
     import lib.common.gs_constvalue as varinfo
     import threading
@@ -50,10 +47,37 @@ def RegisterLogModule(moduleName, state):
     if not _logs:
         return
     if moduleName not in _logs.modLevel.keys():
-        recordError(LOG_MODULE, "module %s has been registered" % (moduleName))
+        record(LOG_MODULE, "module %s has been registered" % (moduleName))
         return
     newModule = {moduleName : state}
     _logs.modLevel.update(newModule)
+
+
+def logRecycle(logBase):
+    """
+    function : Register the names and paths of logs to be managed
+    input : file path, file name
+    output : NA
+    """
+    logList = glob.glob(logBase + "/*.log")
+    logList.sort()
+    count = len(logList)
+    if count <= varinfo.METRIC_MAX_LOG_COUNT:
+        return
+    for i in range(0, count - varinfo.METRIC_MAX_LOG_COUNT):
+        if os.path.isfile(logList[i]):
+            os.remove(logList[i])
+
+
+def LogRecycleSched(clock):
+    """
+    function : Main loop interface for log management
+    input : NA
+    output : NA
+    """
+    global _logs
+    if clock % varinfo.METRIC_LOG_RECYCLE_INTERVAL == 0:
+        logRecycle(_logs.logBase)
 
 
 def StartLogManager(runMode):
@@ -61,7 +85,7 @@ def StartLogManager(runMode):
     _logs = RunningLog(runMode)
 
 
-def recordError(module, msg, level="LOG"):
+def record(module, msg, level="LOG"):
     """
     function : Record script running error
     input : the function caller, error massage, error detail
@@ -84,6 +108,7 @@ def recordError(module, msg, level="LOG"):
     # Use lock to prevent logging errors from multithreaded logging
     if LogLevel(level) <= curModlevel:
         lock.acquire()
+        logRecycle(_logs.logBase)
         _logs.logWriteAndTimer(error)
         lock.release()
     if "PANIC" in level:
@@ -107,7 +132,7 @@ class MetricLog:
         # log name with absolute path and timestamp
         self.file = os.path.join(path, filename + time.strftime(varinfo.METRIC_LOGFILE_FORMAT, time.localtime()))
         # log object
-        self.log = open(self.file, "w+")
+        self.log = open(self.file, "a+")
 
     def getLogSize(self):
         """
@@ -143,7 +168,7 @@ class MetricLog:
             os.makedirs(self.path)
         self.file = os.path.join(self.path, self.filename + time.strftime(
             varinfo.METRIC_LOGFILE_FORMAT, time.localtime()))
-        self.log = open(self.file, "w+")
+        self.log = open(self.file, "a+")
 
     def logWrite(self, message):
         """
@@ -249,31 +274,6 @@ class RunningLog:
         if time.strftime("-%Y-%m-%d_%H", time.localtime()) not in self.curFile:
             return True
         return False
-
-    def logRecycle(self):
-        """
-        function : Register the names and paths of logs to be managed
-        input : file path, file name
-        output : NA
-        """
-        logList = glob.glob(self.logBase + "/*.log")
-        logList.sort()
-        count = len(logList)
-        if count <= varinfo.METRIC_MAX_LOG_COUNT:
-            return
-        for i in range(0, count - varinfo.METRIC_MAX_LOG_COUNT):
-            if os.path.isfile(logList[i]):
-                os.remove(logList[i])
-                recordError(LOG_MODULE, "%s is removed" % logList[i])
-
-    def LogRecycleSched(self, clock):
-        """
-        function : Main loop interface for log management
-        input : NA
-        output : NA
-        """
-        if clock % varinfo.METRIC_LOG_RECYCLE_INTERVAL == 0:
-            self.logRecycle()
 
     def logSwitch(self):
         """

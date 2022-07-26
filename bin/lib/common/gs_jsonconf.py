@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 #######################################################################
 # Portions Copyright (c): 2021-2025, Huawei Tech. Co., Ltd.
@@ -18,9 +18,7 @@
 try:
     import os
     import sys
-    import imp
-    imp.reload(sys)
-    sys.setdefaultencoding('utf8')
+    sys.path.append(os.path.dirname(__file__))
     import json
     import gs_logmanager as logmgr
     import gs_constvalue as varinfo
@@ -36,7 +34,7 @@ def MetricItemListCheck(metricItemList):
     for i in metricItemList:
         tableList.append(metricItemList[i]['table']['name'])
     if len(tableList) != len(set(tableList)):
-        logmgr.recordError("JsonConfig", "unique id in metricdev.json has repeated value, please check", "PANIC")
+        logmgr.record("JsonConfig", "unique id in metricdev.json has repeated value, please check", "PANIC")
         return False
     return True
 
@@ -44,12 +42,12 @@ def MetricItemListCheck(metricItemList):
 def jsonLoad(confFile, type):
     empty = {}
     if not os.path.isfile(confFile):
-        logmgr.recordError("JsonConfig", "config file: %s is not exist" % confFile, "PANIC")
+        logmgr.record("JsonConfig", "config file: %s is not exist" % confFile, "PANIC")
         return empty
 
     reader = open(confFile, "r").read()
     if reader is None or reader == '':
-        logmgr.recordError("JsonConfig", "config file: %s is empty" % confFile, "PANIC")
+        logmgr.record("JsonConfig", "config file: %s is empty" % confFile, "PANIC")
         return empty
 
     return json.loads(reader, object_pairs_hook=type)
@@ -100,12 +98,12 @@ def GetHostListConf(confFile):
 def AddTemplateToJconf(dir, path):
     checkpath = os.path.join(varinfo.METRIC_ITEM_DIR, dir, "metricdef.json")
     if not os.path.isfile(checkpath):
-        logmgr.recordError(LOG_MODULE, "Failed to get json in %s" % checkpath)
+        logmgr.record(LOG_MODULE, "Failed to get json in %s" % checkpath)
         return
     metriclist = MetricItemListGet(checkpath)
     newMetric = jsonLoad(path, OrderedDict)
     for k in newMetric.keys():
         if k in metriclist.keys():
-            logmgr.recordError(LOG_MODULE, "Failed to add duplicate metric %s" % k)
+            logmgr.record(LOG_MODULE, "Failed to add duplicate metric %s" % k)
         metriclist[k] = newMetric[k]
     SaveJsonConf(metriclist, checkpath)

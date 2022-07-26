@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #######################################################################
 # Portions Copyright (c): 2021-2025, Huawei Tech. Co., Ltd.
 #
@@ -35,7 +35,7 @@ const value for agent
 """
 # Metric default parameters
 METRIC_DEFAULT_LOGSIZE_PER_FILE = DATA_TYPE_MBYTES * 20
-METRIC_MAX_LOG_COUNT = 10
+METRIC_MAX_LOG_COUNT = 50
 METRIC_DEFAULT_LOGTIME = 0
 METRIC_LOG_RECYCLE_INTERVAL = 600
 
@@ -52,7 +52,7 @@ GS_METRIC_SERVER_NAME = "gs_archive"
 """
 const value for log
 """
-DATA_LEN_ERROR = 512
+DATA_LEN_ERROR = 1024
 
 FILE_MAX_LOGSZIE = 10
 FILE_NUM_PUSH_FAILURE = 10

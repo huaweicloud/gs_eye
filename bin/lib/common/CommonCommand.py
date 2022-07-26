@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # coding=utf-8
 #######################################################################
 # Portions Copyright (c): 2021-2025, Huawei Tech. Co., Ltd.
@@ -18,15 +18,45 @@
 try:
     import os
     import sys
-    import commands
     from ctypes import cdll
     from ctypes import c_void_p
     from ctypes import c_int
     from ctypes import c_char_p
     from ctypes import string_at
+    sys.path.append(os.path.dirname(__file__))
     from lib.common import gs_constvalue as varinfo
 except Exception as e:
     sys.exit("FATAL: %s Unable to import module: %s" % (__file__, e))
+
+
+def runShellCommand(cmd):
+    """
+    function: judge the python version and run command by different function
+    :param cmd: shell command
+    :return: stauts, output
+    """
+    if sys.version_info.major == 3:
+        import subprocess
+        return subprocess.getstatusoutput(cmd)
+    elif sys.version_info.major == 2:
+        import commands
+        return commands.getstatusoutput(cmd)
+    else:
+        raise Exception("Can not judge the python version by sys.version_info. Result: %s" % sys.version_info)
+
+
+def judgeVersion():
+    """
+    function: judge the python version and run command by different function
+    :param : shell command
+    :return: 'python2' or 'python3'
+    """
+    cmd = "grep -d skip '#!/usr/bin/env python3' %s/* | wc - l" % os.path.join(os.getenv("GPHOME"), 'script')
+    status, output = runShellCommand(cmd)
+    if status == 0 and output == '1':
+        return 'python3'
+    else:
+        return 'python2'
 
 
 class sqlResult():
@@ -65,8 +95,9 @@ class sqlResult():
                 tmpString = []
                 for j in range(nfields):
                     paramValue = libc.PQgetvalue(self.result, i, j)
-                    if paramValue is not None:
-                        tmpString.append(string_at(paramValue))
+                    if (paramValue is not None):
+                        tmp_str = string_at(paramValue)
+                        tmpString.append(tmp_str.decode())
                     else:
                         tmpString.append("")
                 self.resSet.append(tmpString)
@@ -74,7 +105,7 @@ class sqlResult():
             raise Exception("%s" % str(e))
 
 
-class CommonCommand:
+class CommonCommand():
     """
     Common for cluster command
     """
@@ -107,14 +138,14 @@ class CommonCommand:
             libc.PQresultStatus.restype = c_int
             libc.PQexec.argTypes = [c_void_p, c_char_p]
             libc.PQexec.restype = c_void_p
-            conn = libc.PQconnectdb(str(conn_opts))
+            conn = libc.PQconnectdb(conn_opts.encode('utf-8'))
             if conn is None:
                 raise Exception("Failed to get connection with database by options: %s" % conn_opts)
             libc.PQstatus.argTypes = [c_void_p]
 
             if libc.PQstatus(conn) != 0:
-                raise Exception("Failed to get connection with database:" % database)
-            tmpResult = libc.PQexec(conn, sql)
+                raise Exception("Failed to get connection with database: %s" % database)
+            tmpResult = libc.PQexec(conn, sql.encode('utf-8'))
             if tmpResult is None:
                 raise Exception("Can not get correct result by executing sql: %s" % sql)
             status = libc.PQresultStatus(tmpResult)
@@ -127,7 +158,7 @@ class CommonCommand:
             result = resultObj.resSet
             libc.PQclear(tmpResult)
             libc.PQfinish(conn)
-            return status, result, err_output
+            return status, result, err_output.decode()
         except Exception as e:
             libc.PQclear.argTypes = [c_void_p]
             libc.PQfinish.argTypes = [c_void_p]
@@ -138,14 +169,51 @@ class CommonCommand:
             raise Exception(str(e))
 
     @staticmethod
+    def runGsqlCommandWithSeparator(sql, port=varinfo.PORT_COORDINATOR, database="postgres"):
+        """
+        function: run sql command with  "record-separator" and "field-separator" to split data
+        input : sql
+        output: [[column1,column2..],[column1,column2..]..]
+        """
+        cmd = "gsql -p %s -d %s -c \"%s\" -t -A -R \"record-separator\" -F \"field-separator\"" % (port, database, sql)
+        (status, output) = runShellCommand(cmd)
+        if status != 0:
+            raise Exception("Failed to execute cmd: %s" % cmd)
+        if output.startswith('SET'):
+            output = output[4:]
+        result = []
+        for line in output.split("record-separator"):
+            tmp = []
+            if not line:
+                result.append([])
+                continue
+            for i in line.split("field-separator"):
+                tmp.append(i)
+            result.append(tmp)
+        return status, result
+
+    @staticmethod
     def runGsqlCommand(sql, port=varinfo.PORT_COORDINATOR, database="postgres"):
         """
-        function: write output message
+        function: run sql command and return output
+        input : sql, cn port, database
+        output: str
+        """
+        cmd = "gsql -p %s -d %s -c \"%s\" -t -A" % (port, database, sql)
+        (status, output) = runShellCommand(cmd)
+        if status != 0 or "error" in output.lower() or "fatal" in output.lower():
+            status = 1
+        return status, output
+
+    @staticmethod
+    def runGsqlCommandByFile(sqlFile, port=varinfo.PORT_COORDINATOR, database="postgres"):
+        """
+        function: run sql command with file
         input : sql
         output: NA
         """
-        cmd = "gsql -p %s -d %s -c \"%s\" -t -A" % (port, database, sql)
-        (status, output) = commands.getstatusoutput(cmd)
+        cmd = "gsql -p %s -d %s -f \"%s\" -t -A" % (port, database, sqlFile)
+        (status, output) = runShellCommand(cmd)
         if status != 0:
             raise Exception("Failed to execute cmd: %s" % cmd)
         return status, output

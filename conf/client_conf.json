@@ -2,14 +2,15 @@
   "_comment" : "config for default metric item",
   "GlobalManager":{
     "_comment" : "global config for metric manager",
-    "max_threads" : 5,
+    "max_threads" : 50,
     "max_retry_times" : 5,
     "pusher" : {
       "method" : "nokeep",
-      "protocal" : "http",
-      "base_url" : "http://10.185.180.235:8090/metricdata/",
-      "interval" : 120,
-      "cluster_name" : "cluster2"
+      "protocol" : "scp",
+      "base_url" : "omm@*.*.*.*:/home/metricbase/metricdata/",
+      "interval" : 60,
+      "cluster_name" : "cluster2",
+      "max_compress_files": 1000
     }
   }
 }

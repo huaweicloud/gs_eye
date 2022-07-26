@@ -85,5 +85,5 @@ echo "
     rsslim           bigint,
     task_cpu         int
 "
-echo "python \${METRIC_ITEM}os/probe/pid_probe.py"
-python ${METRIC_ITEM}os/probe/pid_probe.py | awk '{out=$1; for(i=2;i<6;i++){out=out"|"$i}; for(i=11;i<27;i++){out=out"|"$i}; print out"|"$40}'
+echo "python3 \${METRIC_ITEM}os/probe/pid_probe.py"
+python3 ${METRIC_ITEM}os/probe/pid_probe.py | awk '{out=$1; for(i=2;i<6;i++){out=out"|"$i}; for(i=11;i<27;i++){out=out"|"$i}; print out"|"$40}'

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #-*- coding:utf-8 -*-
 #######################################################################
 # Portions Copyright (c): 2021-2025, Huawei Tech. Co., Ltd.
@@ -17,8 +17,10 @@
 
 try:
     import sys
+    import os
     import time
     import threading
+    sys.path.append(os.path.dirname(__file__))
     import lib.common.gs_logmanager as logmgr
 except Exception as e:
     sys.exit("FATAL: %s Unable to import module: %s" % (__file__, e))
@@ -85,7 +87,7 @@ class GaussThreadPool():
                 timeout: timeout for this job
         output : none
         """
-        logmgr.recordError(LOG_MODULE, "submit", "DEBUG")
+        logmgr.record(LOG_MODULE, "submit", "DEBUG")
         self.queueLock.acquire()
         self.workQueue.append((myJob, timeout))
         self.queueLock.release()
@@ -103,4 +105,4 @@ class GaussThreadPool():
         self.exitFlag = 1
         for t in self.threads:
             t.join()
-        logmgr.recordError(LOG_MODULE, "clean thread pool")
+        logmgr.record(LOG_MODULE, "clean thread pool")
