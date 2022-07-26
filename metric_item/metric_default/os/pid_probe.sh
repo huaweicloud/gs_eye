@@ -24,7 +24,8 @@ if [ "${gphome}" == "" ]; then
 fi
 pythonString=`grep -d skip '#!/usr/bin/env python3' ${gphome}/script/*  | wc -l`
 if [ ${pythonString} -eq 0 ]; then
-    python2 ${METRIC_ITEM}/metric_default/os/probe/query_probe.py
+    python2 ${METRIC_ITEM}/metric_default/os/probe/pid_probe.py
 else
-    python3 ${METRIC_ITEM}/metric_default/os/probe/query_probe.py
+    python3 ${METRIC_ITEM}/metric_default/os/probe/pid_probe.py
 fi
+

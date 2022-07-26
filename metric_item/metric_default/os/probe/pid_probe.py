@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #######################################################################
 # Portions Copyright (c): 2021-2025, Huawei Tech. Co., Ltd.
 #
@@ -18,11 +18,11 @@ try:
     import os
     import sys
     sys.path.append(os.environ.get("METRIC_LIB"))
-    import cluster.dbinfo as dbinfo
+    import lib.common.cluster.gs_instance_manager as dbinfo
 except Exception as e:
     sys.exit("FATAL: Unable to import module: %s" % e)
 
-clusterInfo = dbinfo.getDbInfo(os.environ.get("GAUSS_USER"))
+clusterInfo = dbinfo.getDbInfo(os.environ.get("USER"))
 for dbNode in clusterInfo.dbNodes:
     if dbNode.name == clusterInfo.hostname:
         for cn in dbNode.coordinators:

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #-*- coding:utf-8 -*-
 #######################################################################
 # Portions Copyright (c): 2021-2025, Huawei Tech. Co., Ltd.
@@ -18,10 +18,11 @@
 try:
     import os
     import sys
+    sys.path.append(os.path.dirname(__file__))
     import getopt
-    import commands
     import gs_constvalue as varinfo
     import gs_jsonconf as jconf
+    import lib.common.CommonCommand as common
     import cluster.gs_instance_manager as dbinfo
 except Exception as e:
     sys.exit("FATAL: %s Unable to import module: %s" % (__file__, e))
@@ -108,7 +109,7 @@ class RunEnvironment(Parameter):
             sys.exit("Wrong mode")
         command = "ps -ef | grep %s | grep -v -E 'grep|sh|source|%d' | awk '{print $2}'" \
                   % (self.appName, os.getpid())
-        status, output = commands.getstatusoutput(command)
+        status, output = common.runShellCommand(command)
         if status != 0:
             dbinfo.raiseRuntimeError("Failed to check running state", output)
         else:
@@ -137,11 +138,13 @@ class RunEnvironment(Parameter):
             self.hostlist.append(dbNode.name)
             if dbNode.name == self.hostname:
                 for cn in dbNode.coordinators:
-                    self.coordinator.append(dbinfo.DBNodeInfo("coordinator", cn.instanceId, cn.port, cn.datadir))
+                    self.coordinator.append(dbinfo.DBNodeInfo("coordinator", cn.instanceId, cn.port, cn.datadir,
+                                                              cn.instanceType))
                 for dn in dbNode.datanodes:
                     # 0 indicates master and 1 indicates standby
                     if dn.instanceType in (0, 1):
-                        self.datanode.append(dbinfo.DBNodeInfo("datanode", dn.instanceId, dn.port, dn.datadir))
+                        self.datanode.append(dbinfo.DBNodeInfo("datanode", dn.instanceId, dn.port, dn.datadir,
+                                                               dn.instanceType))
         self.dbNodeList = self.coordinator + self.datanode
         self.clusterInfo = clusterInfo
 

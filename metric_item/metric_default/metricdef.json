@@ -10,8 +10,8 @@
       "times" : 100
     },
     "metric_func": {
-      "query_type" : "coordinator",
-      "query_database" : "ALL",
+      "query_type" : "ccn",
+      "query_database" : "postgres",
       "query_string": "cn_get_concurrency_enqueue.sql"
     },
     "table" : {
@@ -22,7 +22,7 @@
         "datname":"text",
         "coorname":"text",
         "enqueue":"text",
-        "count":"bigint"
+        "cnt":"bigint"
       }
     }
   },
@@ -31,7 +31,7 @@
     "type" : "query",
     "collector" : {
       "_comment" : "method could be set in off/durative/times/dry",
-      "method" : "durative",
+      "method" : "off",
       "interval" : 86400,
       "times" : 100
     },
@@ -60,7 +60,7 @@
       "times" : 100
     },
     "metric_func": {
-      "query_type" : "coordinator",
+      "query_type" : "ccn",
       "query_database" : "postgres",
       "query_string": "cn_get_topsql.sql"
     },
@@ -93,7 +93,7 @@
       "times" : 100
     },
     "metric_func": {
-      "query_type" : "coordinator",
+      "query_type" : "ccn",
       "query_database" : "postgres",
       "query_string": "cn_get_jobs_count_avgtime.sql"
     },
@@ -118,8 +118,8 @@
       "times" : 100
     },
     "metric_func": {
-      "query_type" : "coordinator",
-      "query_database" : "ALL",
+      "query_type" : "ccn",
+      "query_database" : "postgres",
       "query_string": "cn_get_sql_count.sql"
     },
     "table" : {
@@ -149,8 +149,8 @@
       "times" : 100
     },
     "metric_func": {
-      "query_type" : "coordinator",
-      "query_database" : "ALL",
+      "query_type" : "ccn",
+      "query_database" : "postgres",
       "query_string": "cn_get_sql_avgtime.sql"
     },
     "table" : {
@@ -232,7 +232,7 @@
       "times" : 100
     },
     "metric_func": {
-      "query_type" : "coordinator",
+      "query_type" : "ccn",
       "query_database" : "postgres",
       "query_string": "cn_get_wait_status.sql"
     },
@@ -242,7 +242,7 @@
       "define":{
         "wait_status":"text",
         "wait_event":"text",
-        "count":"int"
+        "cnt":"int"
       }
     }
   },
@@ -264,6 +264,7 @@
       "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
       "name" : "database_object_t",
       "define":{
+        "datname": "text",
         "user_count":"int",
         "db_count":"int",
         "schema_count":"int",
@@ -282,14 +283,15 @@
     },
     "metric_func": {
       "query_type" : "coordinator",
-      "query_database" : "postgres",
+      "query_database" : "ALL",
       "query_string": "cn_get_db_deadtuple_ratio.sql"
     },
     "table" : {
       "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
       "name" : "database_catalog_deadtuple_ratio_t",
       "define":{
-        "relname":"name",
+        "datname": "text",
+        "relname":"text",
         "live_count":"int",
         "dead_count":"int"
       }
@@ -430,7 +432,7 @@
         "attribute" : "text",
         "status" : "text",
         "enqueue" : "text",
-        "count" : "int"
+        "cnt" : "int"
       }
     }
   },
@@ -444,7 +446,7 @@
       "times" : 100
     },
     "metric_func": {
-      "query_type" : "coordinator",
+      "query_type" : "ccn",
       "query_database" : "postgres",
       "query_string": "cn_get_workload_struct.sql"
     },
@@ -475,7 +477,7 @@
       "name" : "database_residual_thread_t",
       "define":{
         "query_id":"bigint",
-        "count":"int"
+        "cnt":"int"
       }
     }
   },
@@ -491,7 +493,7 @@
     "metric_func": {
       "command": "sar",
       "option" : " -q 1 5",
-      "formation" : "grep Average | awk '{$1=\"\";print $0}' | sed 's/[ ][ ]*/|/g' | sed 's/^|//g' | sed 's/|$//g'"
+      "formation" : "grep Average | awk '{print $2,$3,$4,$5,$6}' | sed 's/[ ][ ]*/|/g' | sed 's/^|//g' | sed 's/|$//g'"
     },
     "table" : {
       "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
@@ -501,8 +503,7 @@
         "plistsz":"int",
         "ldavg1":"float",
         "ldavg5":"float",
-        "ldavg15":"float",
-        "blocked" : "int"
+        "ldavg15":"float"
       }
     }
   },
@@ -539,7 +540,7 @@
     "collector" : {
       "_comment" : "method could be set in off/durative/times/dry",
       "method" : "durative",
-      "interval" : 10,
+      "interval" : 60,
       "times" : 100
     },
     "metric_func": {
@@ -566,6 +567,440 @@
         "drop_time" : "float",
         "commit_time" : "float",
         "total_probe_time" : "float"
+      }
+    }
+  },
+  "host_inode_usage"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 86400,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "df",
+      "option" : " -i",
+      "formation" : "grep -v Filesystem | awk '{print $0}' | sed 's/[ ][ ]*/|/g' | sed 's/^|//g' | sed 's/|$//g'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_inode_usage_t",
+      "define":{
+        "dev":"text",
+        "inodes":"bigint",
+        "iused":"bigint",
+        "ifree":"bigint",
+        "iused_percentage":"text",
+        "mount_on":"text"
+      }
+    }
+  },
+  "host_disk_usage"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 86400,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "df",
+      "option" : "",
+      "formation" : "grep -v Filesystem | awk '{print $0}' | sed 's/[ ][ ]*/|/g' | sed 's/^|//g' | sed 's/|$//g'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_disk_usage_t",
+      "define":{
+        "dev":"text",
+        "blocks_1k":"bigint",
+        "kbused":"bigint",
+        "kbavailable":"bigint",
+        "used_percentage":"text",
+        "mount_on":"text"
+      }
+    }
+  },
+  "host_fd_count"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 7200,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "export PATH=/bin:/usr/local/bin:/usr/bin:/sbin:/usr/sbin:$PATH && lsof",
+      "option" : "-w",
+      "formation" : "awk '{print $2}' | sort | uniq -c | sort -nr | sed -n '1,20p' | awk '{print $1\"|\"$2}'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_fd_count_t",
+      "define":{
+        "used_count":"int",
+        "pid":"int"
+      }
+    }
+  },
+  "host_fd_deleted_count"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 7200,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "export PATH=/bin:/usr/local/bin:/usr/bin:/sbin:/usr/sbin:$PATH && lsof",
+      "option" : "-w",
+      "formation" : "grep deleted | wc -l"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_fd_deleted_count_t",
+      "define":{
+        "deleted_count":"int"
+      }
+    }
+  },
+  "host_memory_stat"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 10,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "sar",
+      "option" : "-r 1 5",
+      "formation" : " grep Average | awk '{print $2,$3,$4,$5,$6,$7,$8}' | sed 's/[ ][ ]*/|/g' | sed 's/^|//g' | sed 's/|$//g'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_memory_stat_t",
+      "define": {
+        "kbmemfree":"bigint",
+        "kbmemused":"bigint",
+        "memused":"float",
+        "kbbuffers":"bigint",
+        "kbcached":"bigint",
+        "kbcommit":"bigint",
+        "commit":"float"
+      }
+    }
+  },
+  "host_page_swap"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 10,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "sar",
+      "option" : "-B 1 5",
+      "formation" : " grep Average | awk '{$1=\"\";print $0}' | sed 's/[ ][ ]*/|/g' | sed 's/^|//g' | sed 's/|$//g'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_page_swap_t",
+      "define":{
+        "pgpgin_s":"float",
+        "pgpgout_s":"float",
+        "fault_s":"float",
+        "majflt_s":"float",
+        "pgfree_s":"float",
+        "pgscank_s":"float",
+        "pgscand_s":"float",
+        "pgsteal_s":"float",
+        "vmeff":"float"
+      }
+    }
+  },
+  "host_memory_info"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 300,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "cat /proc/meminfo",
+      "option" : "",
+      "formation" : "awk '{print $1\"|\"$2}' | sed -e 's/://g'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_memory_info_t",
+      "define":{
+        "key":"text",
+        "value":"text"
+      }
+    }
+  },
+  "host_buddy_info"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 300,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "cat /proc/buddyinfo",
+      "option" : "",
+      "formation" : " awk '{$1=\"\";out=\"\"; for(i=1;i<16;i++) {out=out\" \"$i}; print out}' | sed 's/[ ][ ]*/|/g' | sed 's/^|//g' | sed 's/|$//g'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_buddy_info_t",
+      "define":{
+        "node":"text",
+        "zones":"text",
+        "dev":"text",
+        "page1":"int",
+        "page2":"int",
+        "page4":"int",
+        "page8":"int",
+        "page16":"int",
+        "page32":"int",
+        "page64":"int",
+        "page128":"int",
+        "page256":"int",
+        "page512":"int",
+        "page1024":"int"
+      }
+    }
+  },
+  "host_slabinfo_info"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "off",
+      "interval" : 300,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "cat /proc/slabinfo",
+      "option" : "",
+      "formation" : "sort -rnk 3 | sed -n '1,20p' | sed 's/://g' | sed 's/[ ][ ]*/|/g' | sed 's/^|//g' | sed 's/|$//g'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_slabinfo_info_t",
+      "define":{
+        "name":"text",
+        "active_objs":"int",
+        "num_objs":"int",
+        "objsize":"int",
+        "objperslab":"int",
+        "pagesperslab":"int",
+        "tunables":"text",
+        "limits":"int",
+        "batchcount":"int",
+        "sharedfactor":"int",
+        "slabdata":"text",
+        "active_slabs":"int",
+        "num_slabs":"int",
+        "sharedavail":"int"
+      }
+    }
+  },
+  "host_other_resource"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 600,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "sar",
+      "option" : "-v 1 5",
+      "formation" : "grep Average | awk '{$1=\"\";print $0}' | sed 's/[ ][ ]*/|/g' | sed 's/^|//g' | sed 's/|$//g'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_other_resource_t",
+      "define":{
+        "dentunusd":"int",
+        "file_nr":"int",
+        "inode_nr":"int",
+        "pty_nr":"int"
+      }
+    }
+  },
+  "host_zombie_count"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 21600,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "ps",
+      "option" : "-ef",
+      "formation" : "grep defunct | grep -v grep | wc -l"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_zombie_count_t",
+      "define":{
+        "counts":"int"
+      }
+    }
+  },
+  "host_top_cpu_process"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 600,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "ps",
+      "option" : "aux --sort -pcpu",
+      "formation" : "sed -n '2,21p' | sed 's/|/\\?/g' | awk '{out=$1; for(i=2;i<=11;i++){out=out\"|\"$i}; for(i=12;i<=NF;i++){out=out\" \"$i}; print out}'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_top_cpu_process_t",
+      "define":{
+        "username":"text",
+        "pid":"int",
+        "cpu":"float",
+        "mem":"float",
+        "vsz":"int",
+        "rss":"int",
+        "tty":"text",
+        "stat":"text",
+        "start":"text",
+        "duration":"text",
+        "command":"text"
+      }
+    }
+  },
+  "host_top_memory_process"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 600,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "ps",
+      "option" : "aux --sort -pmem",
+      "formation" : "sed -n '2,21p' | sed 's/|/\\?/g' | awk '{out=$1; for(i=2;i<=11;i++){out=out\"|\"$i}; for(i=12;i<=NF;i++){out=out\" \"$i}; print out}'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_top_memory_process_t",
+      "define":{
+        "username":"text",
+        "pid":"int",
+        "cpu":"float",
+        "mem":"float",
+        "vsz":"int",
+        "rss":"int",
+        "tty":"text",
+        "stat":"text",
+        "start":"text",
+        "duration":"text",
+        "command":"text"
+      }
+    }
+  },
+  "host_instace_stat"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 600,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "os/pid_probe.sh",
+      "option" : "",
+      "formation" : "awk '{out=$1; for(i=2;i<6;i++){out=out\"|\"$i}; for(i=11;i<27;i++){out=out\"|\"$i}; print out\"|\"$40}'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_instace_stat_t",
+      "define":{
+        "nodename":"text",
+        "pid":"text",
+        "command":"text",
+        "state":"char",
+        "ppid":"text",
+        "min_flt":"text",
+        "cmin_flt":"text",
+        "maj_flt":"text",
+        "cmaj_flt":"text",
+        "utime":"text",
+        "stime":"text",
+        "cutime":"text",
+        "cstime":"text",
+        "priority":"text",
+        "nice":"text",
+        "num_threads":"text",
+        "it_real_value":"text",
+        "start_time":"text",
+        "pid_vsize":"text",
+        "rss":"text",
+        "rsslim":"text",
+        "task_cpu":"text"
+      }
+    }
+  },
+  "host_io_stat"  : {
+    "_comment" : "unique_id must be global unique, type is query(on cn)/command/log",
+    "type" : "command",
+    "collector" : {
+      "_comment" : "method could be set in off/durative/times/dry",
+      "method" : "durative",
+      "interval" : 10,
+      "times" : 100
+    },
+    "metric_func": {
+      "command": "sar",
+      "option" : "-d -p 1 5",
+      "formation" : "grep Average| grep -v DEV | awk '{$1=\"\";print $0}' | sed 's/[ ][ ]*/|/g' | sed 's/^|//g' | sed 's/|$//g'"
+    },
+    "table" : {
+      "_comment" : "name: table name in maintain cluster, define: data column without time, node, instance",
+      "name" : "host_io_stat_t",
+      "define":{
+        "DEV": "text",
+        "tps": "float",
+        "rd_sec_per_sec":"float",
+        "wr_sec_per_sec":"float",
+        "avgrq_sz":"float",
+        "avgqu_sz":"float",
+        "await":"float",
+        "svctm":"float",
+        "util_percent":"float"
       }
     }
   }

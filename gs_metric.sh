@@ -13,13 +13,13 @@
 #  MERCHANTABILITY OR FIT FOR A PARTICULA# R PURPOSE.
 #  See the Mulan PSL v2 for more details.
 #######################################################################
-
-source /opt/huawei/Bigdata/mppdb/.mppdbgs_profile
+MPPDB_ENV=`echo ${MPPDB_ENV_SEPARATE_PATH}`
 MET_HOME="/home/omm/gs_metric"
 
 BIN_HOME="${MET_HOME}/bin"
 AGENT_BIN="gs_metricagent.py"
 SERVER_BIN="gs_archive.py"
+AGENT_WATCHER="gs_agent_watcher.py"
 RUNMODE="agent"
 MET_BIN=""
 MET_OPT="-u omm"
@@ -33,17 +33,19 @@ function usage() {
 Usage:
   ./${START_BIN} help
   Example:
-    ./${START_BIN} [[start | stop | status ] [ --server | --agent]] | [ install | version | help ] 
-	    | [ metric [ add [ template_file ]] | [ enable | disable [ METRICNAME ]]]
+    ./${START_BIN} [[start | stop | status ] [ --server | --agent | --all]] | [ install | uninstall | version | help ]]
 
 General options:
     main command:
+    install                   Install the gs_metric to each node for current cluster.
+    uninstall                 Uninstall the gs_metric.
     start                     Start the scripts in the cluster.
     stop                      Stop the scripts in the cluster.
     status                    Show the script status in the cluster.
         sub options for main command
-        --server              Start metric import server to analyze data into maintainace database.
-        --agent               Start metric agent client to collect metric from online cluster.
+        --all                 To start/stop/status metric agent and metric server (default).
+        --server              To start/stop/status metric server which is analyze data and import data into maintainace database.
+        --agent               To start/stop/status metric agent which is client to collect metric from online cluster.
     
     maintain command:
     version                   Show version information.
@@ -106,16 +108,16 @@ function check_script() {
         echo "FATAL: Could not check the path ${BIN_HOME} in host ${1}"
         return 7
     elif [ "${exist}" == "0" ]; then
-        scp -q -r ${MET_HOME}/* ${1}:${MET_HOME}
+        scp -q -r ${BIN_HOME}/* ${1}:${BIN_HOME}/
         if [ "$?" != 0 ]; then
             echo "FATAL: Could not scp the files ${BIN_HOME} to host ${1}"
             return 8
         fi
     else
-        mver=`source /opt/huawei/Bigdata/mppdb/.mppdbgs_profile;cd ${BIN_HOME};${BIN_HOME}/${MET_BIN} -v 2>&1`
-        rver=`ssh -q ${1} "source /opt/huawei/Bigdata/mppdb/.mppdbgs_profile;cd ${BIN_HOME};${BIN_HOME}/${MET_BIN} -v 2>&1"`
+        mver=`source ${MPPDB_ENV};cd ${BIN_HOME};${BIN_HOME}/${MET_BIN} -v 2>&1`
+        rver=`ssh -q ${1} "source ${MPPDB_ENV};cd ${BIN_HOME};${BIN_HOME}/${MET_BIN} -v 2>&1"`
         if [ "${rver}" != "${mver}" ]; then
-            scp -q -r ${MET_HOME}/* ${1}:${MET_HOME}
+            scp -q -r ${MET_HOME}/bin ${MET_HOME}/conf ${MET_HOME}/metric_item ${MET_HOME}/gs_metric.sh ${1}:${MET_HOME}/
             if [ "$?" != "0" ]; then
                 echo "FATAL: Could not update the script ${MET_BIN} in host ${1}"
                 return 9
@@ -141,7 +143,7 @@ function start_daemon() {
     for host in ${1}; do
         check_script ${host}
         if [ "$?" == "0" ]; then
-            ssh -q ${host} "sh ${START_HOME}/${START_BIN} run --$RUNMODE"
+            ssh -q ${host} "source ${MPPDB_ENV};sh ${START_HOME}/${START_BIN} run --$RUNMODE"
             if [ "$?" != "0" ]; then
                 echo "FATAL: Could not add a timed task in host ${host}"
             else
@@ -159,7 +161,7 @@ function stop_daemon() {
     fi
     
     for host in ${1}; do
-        ssh -q ${host} "${START_HOME}/${START_BIN} stop_local --$RUNMODE"
+        ssh -q ${host} "source ${MPPDB_ENV};${START_HOME}/${START_BIN} stop_local --$RUNMODE"
     done
 }
 
@@ -180,7 +182,23 @@ function run() {
         echo "Warning: ${RUNMODE}.pid file is missing, but ${MET_BIN} is already in progress"
     else
         cd ${BIN_HOME}
-        nohup python ${BIN_HOME}/${MET_BIN} ${MET_OPT} 1>../start.log 2>&1 &
+        gphome=`echo $GPHOME`
+        if [ "${gphome}" == "" ]; then
+            echo "FATAL: Could not get \$GPHOME environment variable"
+            exit 1
+        fi
+        pythonString=`grep -d skip '#!/usr/bin/env python3' ${gphome}/script/*  | wc -l`
+        if [ ${pythonString} -eq 0 ]; then
+            nohup python2 ${BIN_HOME}/${MET_BIN} ${MET_OPT} 1>../start.log 2>&1 &
+            if [ ${RUNMODE} == "agent" ]; then
+                nohup python2 ${BIN_HOME}/${AGENT_WATCHER} 1>../start.log 2>&1 &
+            fi
+        else
+            nohup python3 ${BIN_HOME}/${MET_BIN} ${MET_OPT} 1>../start.log 2>&1 &
+            if [ ${RUNMODE} == "agent" ]; then
+                nohup python3 ${BIN_HOME}/${AGENT_WATCHER} 1>../start.log 2>&1 &
+            fi
+        fi
         sleep 2
         pid=`ps ux | grep "${MET_BIN}" | grep -v -E 'grep|sh|source' | awk '{print $2}'`
         if [ "${pid}" != "" ]; then
@@ -205,9 +223,13 @@ function stop() {
     else
         pid=`ps ux | grep "${MET_BIN}" | grep -v -E 'grep|sh|source' | awk '{print $2}'`
     fi
-    
+    watcher_pid=""
+    if [ ${RUNMODE} == 'agent' ]; then
+        watcher_pid=`ps ux | grep "${AGENT_WATCHER}" | grep -v -E 'grep|sh|source' | awk '{print $2}'`
+    fi
+
     if [ "${pid}" != "" ]; then
-        kill -9 ${pid}
+        kill -9 ${pid} ${watcher_pid}
         if [ "$?" != "0" ]; then
             echo "FATAL: Could not kill process ${pid} in host ${HOSTNAME}"
         else
@@ -278,16 +300,16 @@ function metric_ops() {
     cd ${BIN_HOME}    
     case "$1" in
         add)
-            python ./gs_metric_ops.py -a "../$2" -p ${pid}
+            python3 ./gs_metric_ops.py -a "../$2" -p ${pid}
             ;;
         enable)
-            python ./gs_metric_ops.py -e "$2" -p ${pid}
+            python3 ./gs_metric_ops.py -e "$2" -p ${pid}
             ;;
         disable)
-            python ./gs_metric_ops.py -d "$2" -p ${pid}
+            python3 ./gs_metric_ops.py -d "$2" -p ${pid}
             ;;
         list)
-            python ./gs_metric_ops.py -l "$2" -p ${pid}
+            python3 ./gs_metric_ops.py -l "$2" -p ${pid}
             ;;
         *)
             usage
@@ -309,11 +331,30 @@ function metric_daemon() {
     for host in ${hosts}; do
         check_script ${host}
         if [ "$?" == "0" ]; then
-            ssh -q ${host} "sh ${START_HOME}/${START_BIN} metric_ops $@"
+            ssh -q ${host} "source ${MPPDB_ENV};sh ${START_HOME}/${START_BIN} metric_ops $@"
             if [ "$?" != "0" ]; then
                 echo "FATAL: Could not add metric in host ${host}"
             else
                 echo "Successfully add metric in host ${host}"
+            fi
+        fi
+    done
+}
+
+function uninstall() {
+    log_path="${GAUSSLOG}/gs_metricdata"
+    rm -rf ${log_path}
+    local_host=`hostname`
+    echo "Success uninstall in host: ${local_host}"
+    for host in ${1}; do
+        exist=`ssh -q ${host} "if [ -d ${MET_HOME} ]; then echo 1; else echo 0; fi"`
+        if [ "${exist}" == "1" ]; then
+            ssh -q ${host} "rm -rf ${MET_HOME} ${log_path}"
+            if [ "$?" != 0 ]; then
+                echo "FATAL: Could not remove the path ${MET_HOME} in host ${1}"
+                return 6
+            else
+                echo "Success uninstall in host: $host"
             fi
         fi
     done
@@ -339,12 +380,28 @@ function main() {
     
     case "$1" in
         start)
-            initmode "$2"
-            start_daemon "${cluster}" "${environ}"
+            if [ "$2" == "" -o "$2" == "--all" ]; then
+                echo "start all instance"
+                initmode "--server"
+                start_daemon "${cluster}" "${environ}"
+                initmode "--agent"
+                start_daemon "${cluster}" "${environ}"
+            else
+                initmode "$2"
+                start_daemon "${cluster}" "${environ}"
+            fi
             ;;
         stop)
-            initmode "$2"
-            stop_daemon "${cluster}"
+            if [ "$2" == "" -o "$2" == "--all" ]; then
+                echo "stop all instance"
+                initmode "--agent"
+                stop_daemon "${cluster}" "${environ}"
+                initmode "--server"
+                stop_daemon "${cluster}" "${environ}"
+            else
+                initmode "$2"
+                stop_daemon "${cluster}"
+            fi
             ;;
         run)
             initmode "$2"
@@ -355,8 +412,24 @@ function main() {
             stop
             ;;
         status)
-            initmode "$2"
-            status "${cluster}"
+            if [ "$2" == "" -o "$2" == "--all" ]; then
+                echo "server status:"
+                initmode "--server"
+                status "${cluster}"
+                echo "agent status:"
+                initmode "--agent"
+                status "${cluster}"
+            else
+                initmode "$2"
+                status "${cluster}"
+            fi
+            ;;
+        uninstall)
+            initmode "--agent"
+            stop_daemon "${cluster}" "${environ}"
+            initmode "--server"
+            stop_daemon "${cluster}" "${environ}"
+            uninstall "${cluster}"
             ;;
         version)
             version
@@ -364,16 +437,16 @@ function main() {
         install)
             install "${cluster}"
             ;;
-        metric)
-            shift
-            install_template_file "${cluster}"
-            initmode "--agent"
-            metric_daemon "${cluster}" $@
-            ;;
-        metric_ops)
-            shift
-            metric_ops $@
-            ;;
+#        metric)
+#            shift
+#            install_template_file "${cluster}"
+#            initmode "--agent"
+#            metric_daemon "${cluster}" $@
+#            ;;
+#        metric_ops)
+#            shift
+#            metric_ops $@
+#            ;;
         *)
             usage
             ;;

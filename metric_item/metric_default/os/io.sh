@@ -58,5 +58,5 @@ echo "
     readtime_us   int,
     closetime_us  int
 "
-echo "python \${METRIC_ITEM}os/probe/io_probe.py"
-python ${METRIC_ITEM}os/probe/io_probe.py
+echo "python3 \${METRIC_ITEM}os/probe/io_probe.py"
+python3 ${METRIC_ITEM}os/probe/io_probe.py

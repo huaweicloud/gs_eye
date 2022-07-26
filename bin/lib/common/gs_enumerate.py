@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 #######################################################################
 # Portions Copyright (c): 2021-2025, Huawei Tech. Co., Ltd.
@@ -47,7 +47,8 @@ def QueryType(queryType):
         'none': 0,
         'coordinator': 1,
         'datanode': 2,
-        'instance': 3
+        'instance': 3,
+        'ccn': 4
     }
     return queryTypeDict[queryType]
 

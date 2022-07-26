@@ -1,14 +1,9 @@
 {
 "_comment" : "config for data import",
-  "max_threads" : 5,
-  "interval" : 3,
+  "interval" : 5,
   "metric_database": "gsmetric",
   "data_root_path": "/srv/BigData/mppdb/data1/metricbase/metricdata/",
-  "archive" : "off",
-  "data_age" : 30,
-  "cluster_list":{
-    "_comment" : "cluster defination, each cluster name defined as key, and on/off means to import",
-    "cluster1" : "off",
-    "cluster2" : "on"
-  }
+  "max_deal_package": 300,
+  "data_age" : 90,
+  "max_error_files" : 3000
 }

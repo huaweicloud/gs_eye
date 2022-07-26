@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #-*- coding:utf-8 -*-
 #######################################################################
 # Portions Copyright (c): 2021-2025, Huawei Tech. Co., Ltd.
@@ -19,12 +19,10 @@ try:
     import os
     import getopt
     import sys
-    import imp
-    imp.reload(sys)
-    sys.setdefaultencoding('utf8')
+    sys.path.append(os.path.dirname(__file__))
     import time
     import signal
-    from lib.common.gs_logmanager import recordError as recordError
+    from lib.common.gs_logmanager import record as record
     from lib.common.gs_jsonconf import AddTemplateToJconf
     from lib.common import gs_constvalue as varinfo
 except Exception as e:
@@ -52,14 +50,14 @@ if __name__ == "__main__":
         if key == "-a" or key == "--add":
             ops = "add"
             metricItem = value
-            recordError(LOG_MODULE, "add metric %s" % value)
+            record(LOG_MODULE, "add metric %s" % value)
             AddTemplateToJconf("metric_user_define", value)
         if key == "-e" or key == "--enable":
-            recordError(LOG_MODULE, "enable metric %s" % value)
+            record(LOG_MODULE, "enable metric %s" % value)
             ops = "enable"
             metricItem = value
         if key == "-d" or key == "--disable":
-            recordError(LOG_MODULE, "disable metric %s" % value)
+            record(LOG_MODULE, "disable metric %s" % value)
             ops = "disable"
             metricItem = value
         if key == "-p" or key == "--pid":
@@ -71,7 +69,7 @@ if __name__ == "__main__":
     file.close()
 
     if pid == 0:
-        recordError(LOG_MODULE, "no pid is input")
+        record(LOG_MODULE, "no pid is input")
         sys.exit(0)
     os.kill(pid, signal.SIGUSR2)
     while timeout > 0:
@@ -79,6 +77,6 @@ if __name__ == "__main__":
             break
         timeout = timeout - 1
         if timeout == 0:
-            recordError(LOG_MODULE, "%s : %s is timeout" % (ops, value))
+            record(LOG_MODULE, "%s : %s is timeout" % (ops, value))
         time.sleep(1)
     sys.exit(0)
