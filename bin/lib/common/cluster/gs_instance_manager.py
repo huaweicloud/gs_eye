@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #-*- coding:utf-8 -*-
 #######################################################################
 # Portions Copyright (c): 2021-2025, Huawei Tech. Co., Ltd.
@@ -18,11 +18,8 @@
 try:
     import os
     import sys
-    import imp
-    imp.reload(sys)
-    sys.setdefaultencoding('utf8')
     import json
-    import commands
+    import lib.common.CommonCommand as common
     import lib.common.gs_logmanager as logmgr
 except Exception as e:
     sys.exit("FATAL: %s Unable to import module: %s" % (__file__, e))
@@ -86,7 +83,7 @@ class Instance:
     def getInstanceStat(self):
         state = ""
         command = "cat /proc/%s/stat" % self.pid
-        status, output = commands.getstatusoutput(command)
+        status, output = common.runShellCommand(command)
         if not status and output:
             state = output
         return state
@@ -96,16 +93,17 @@ class DBNodeInfo:
     """
     Database instance information
     """
-    def __init__(self, instanceType, nodename, port, datadir):
+    def __init__(self, metricType, instanceId, port, datadir, instanceType):
         """
         Constructor
         """
         # instance type, cn or dn
-        if instanceType == 'coordinator':
-            self.nodename = 'cn' + '_' + str(nodename)
-        elif instanceType == 'datanode':
-            self.nodename = 'dn' + '_' + str(nodename)
-        self.instType = instanceType
+        if metricType == 'coordinator':
+            self.instanceName = 'cn' + '_' + str(instanceId)
+        elif metricType == 'datanode':
+            self.instanceName = 'dn' + '_' + str(instanceId)
+        self.instanceType = instanceType
+        self.type = metricType
         self.port = port
         self.datadir = datadir
         self.state = "Down"
@@ -119,9 +117,9 @@ class DBNodeInfo:
         # It is necessary to get the instance state when multiple queries fail
         self.state = "Down"
         command = "gs_ctl query -D %s | grep local_role | awk '{print $3}' | sed -n '1p'" % self.datadir
-        status, output = commands.getstatusoutput(command)
+        status, output = common.runShellCommand(command)
         if status != 0:
-            logmgr.recordError(owner, "Failed to get node %d state" % self.nodename)
+            logmgr.record(owner, "Failed to get node %s state" % self.instanceName)
         elif output:
             self.state = output
         return self.state
@@ -137,7 +135,7 @@ class DBNodeInfo:
             return True
         # Check whether the state changes from another state to primary
         if self.getNodeState(owner) in ("Primary", "Normal"):
-            logmgr.recordError(owner, "node %s state changed to %s" % (self.nodename, self.state))
+            logmgr.record(owner, "node %s state changed to %s" % (self.instanceName, self.state))
             return True
         return False
 
@@ -184,7 +182,7 @@ class ClusterInfo:
         input : NA
         output : host name
         """
-        status, hostname = commands.getstatusoutput("hostname")
+        status, hostname = common.runShellCommand("hostname")
         if status != 0 or not hostname:
             raiseRuntimeError("Failed to get hostname", hostname)
         return hostname
@@ -198,7 +196,7 @@ class ClusterInfo:
         pid = 0
         # Get the process id from the postmaster.pid file in the instance directory
         command = "cat %s/postmaster.pid | sed -n '1p'" % instance[3]
-        status, output = commands.getstatusoutput(command)
+        status, output = common.runShellCommand(command)
         if not status and output.isdigit():
             pid = int(output)
         # The cluster information file needs to be updated because the process id is changed
