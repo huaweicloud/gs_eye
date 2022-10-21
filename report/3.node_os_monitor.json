@@ -23,7 +23,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 8,
-  "iteration": 1657855299013,
+  "iteration": 1666334985058,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -189,7 +189,43 @@
       "type": "timeseries"
     },
     {
-      "datasource": "${CLUSTER}",
+      "alert": {
+        "alertRuleTags": {},
+        "conditions": [
+          {
+            "evaluator": {
+              "params": [
+                400
+              ],
+              "type": "gt"
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": [
+                "A",
+                "1m",
+                "now"
+              ]
+            },
+            "reducer": {
+              "params": [],
+              "type": "max"
+            },
+            "type": "query"
+          }
+        ],
+        "executionErrorState": "alerting",
+        "for": "2m",
+        "frequency": "1m",
+        "handler": 1,
+        "message": "每隔1m检测1次await，如果最大值超过400ms且持续2个周期，则触发告警",
+        "name": "IO - await趋势 alert",
+        "noDataState": "ok",
+        "notifications": []
+      },
+      "datasource": "常稳环境数据源",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -251,6 +287,30 @@
                 "value": {
                   "fixedColor": "light-red",
                   "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "await {dev=\"sda\", host=\"linux181195\"}"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
                 }
               }
             ]
@@ -329,6 +389,68 @@
               "type": "macro"
             }
           ]
+        },
+        {
+          "format": "time_series",
+          "group": [
+            {
+              "params": [
+                "$__interval",
+                "none"
+              ],
+              "type": "time"
+            },
+            {
+              "params": [
+                "hostname"
+              ],
+              "type": "column"
+            }
+          ],
+          "hide": true,
+          "metricColumn": "hostname",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  time,dev,hostname as ahostname,await\nFROM cluster2.host_io_stat_t\nwhere $__timeFilter(time) \nORDER BY 1\nlimit 100000",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "cur_user"
+                ],
+                "type": "column"
+              },
+              {
+                "params": [
+                  "avg"
+                ],
+                "type": "aggregate"
+              },
+              {
+                "params": [
+                  "cur_user"
+                ],
+                "type": "alias"
+              }
+            ]
+          ],
+          "table": "dgg_fi_edw_gauss_hp.host_cpu_usage_t",
+          "timeColumn": "time",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "op": "gt",
+          "value": 400,
+          "visible": true
         }
       ],
       "title": "IO - await趋势",
@@ -627,7 +749,43 @@
       "type": "timeseries"
     },
     {
-      "datasource": "${CLUSTER}",
+      "alert": {
+        "alertRuleTags": {},
+        "conditions": [
+          {
+            "evaluator": {
+              "params": [
+                75
+              ],
+              "type": "gt"
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": [
+                "A",
+                "24h",
+                "now"
+              ]
+            },
+            "reducer": {
+              "params": [],
+              "type": "max"
+            },
+            "type": "query"
+          }
+        ],
+        "executionErrorState": "alerting",
+        "for": "12h",
+        "frequency": "12h",
+        "handler": 1,
+        "message": "每隔12h检测1次磁盘使用率，如果最大值超过75，则触发告警",
+        "name": "磁盘使用率监控(GB) alert",
+        "noDataState": "ok",
+        "notifications": []
+      },
+      "datasource": "常稳环境数据源",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -707,6 +865,30 @@
                 }
               }
             ]
+          },
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "available {mount_on=\"/data1\", percent=\"11%\"}"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
           }
         ]
       },
@@ -782,13 +964,111 @@
               "type": "macro"
             }
           ]
+        },
+        {
+          "format": "time_series",
+          "group": [
+            {
+              "params": [
+                "$__interval",
+                "none"
+              ],
+              "type": "time"
+            },
+            {
+              "params": [
+                "hostname"
+              ],
+              "type": "column"
+            }
+          ],
+          "hide": true,
+          "metricColumn": "hostname",
+          "rawQuery": true,
+          "rawSql": "select  time,hostname ahostname,mount_on,cast(substrb(used_percentage,0,char_length(used_percentage)-1) as Integer) as useper\nFROM cluster2.host_disk_usage_t \nwhere $__timeFilter(time) and dev not in ('tmpfs','devtmpfs')\nORDER BY 1\nlimit 100000\n",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "cur_user"
+                ],
+                "type": "column"
+              },
+              {
+                "params": [
+                  "avg"
+                ],
+                "type": "aggregate"
+              },
+              {
+                "params": [
+                  "cur_user"
+                ],
+                "type": "alias"
+              }
+            ]
+          ],
+          "table": "dgg_fi_edw_gauss_hp.host_cpu_usage_t",
+          "timeColumn": "time",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "op": "gt",
+          "value": 75,
+          "visible": true
         }
       ],
       "title": "磁盘使用率监控(GB)",
       "type": "timeseries"
     },
     {
-      "datasource": "${CLUSTER}",
+      "alert": {
+        "alertRuleTags": {},
+        "conditions": [
+          {
+            "evaluator": {
+              "params": [
+                75
+              ],
+              "type": "gt"
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": [
+                "A",
+                "24h",
+                "now"
+              ]
+            },
+            "reducer": {
+              "params": [],
+              "type": "max"
+            },
+            "type": "query"
+          }
+        ],
+        "executionErrorState": "alerting",
+        "for": "12h",
+        "frequency": "12h",
+        "handler": 1,
+        "message": "每隔12h检测1次磁盘使用率，如果最大值超过75，则触发告警",
+        "name": "磁盘inode使用监控 alert",
+        "noDataState": "ok",
+        "notifications": []
+      },
+      "datasource": "常稳环境数据源",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -943,6 +1223,68 @@
               "type": "macro"
             }
           ]
+        },
+        {
+          "format": "time_series",
+          "group": [
+            {
+              "params": [
+                "$__interval",
+                "none"
+              ],
+              "type": "time"
+            },
+            {
+              "params": [
+                "hostname"
+              ],
+              "type": "column"
+            }
+          ],
+          "hide": true,
+          "metricColumn": "hostname",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  time,hostname ahostname,mount_on,cast(substrb(iused_percentage,0,char_length(iused_percentage)-1) as Integer) as iuseper\nFROM cluster2.host_inode_usage_t\nwhere $__timeFilter(time) and dev not in ('tmpfs','devtmpfs')\nORDER BY 1\nlimit 100000\n",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "cur_user"
+                ],
+                "type": "column"
+              },
+              {
+                "params": [
+                  "avg"
+                ],
+                "type": "aggregate"
+              },
+              {
+                "params": [
+                  "cur_user"
+                ],
+                "type": "alias"
+              }
+            ]
+          ],
+          "table": "dgg_fi_edw_gauss_hp.host_cpu_usage_t",
+          "timeColumn": "time",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "op": "gt",
+          "value": 75,
+          "visible": true
         }
       ],
       "title": "磁盘inode使用监控",
@@ -1256,17 +1598,76 @@
       "type": "timeseries"
     },
     {
-      "datasource": "${CLUSTER}",
+      "alert": {
+        "alertRuleTags": {},
+        "conditions": [
+          {
+            "evaluator": {
+              "params": [
+                5
+              ],
+              "type": "gt"
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": [
+                "A",
+                "6h",
+                "now"
+              ]
+            },
+            "reducer": {
+              "params": [],
+              "type": "max"
+            },
+            "type": "query"
+          }
+        ],
+        "executionErrorState": "alerting",
+        "for": "6h",
+        "frequency": "6h",
+        "handler": 1,
+        "message": "每6h检测1次僵尸进程，如果僵尸进程数量大于5，则触发告警",
+        "name": "僵尸进程数量监控 alert",
+        "noDataState": "ok",
+        "notifications": []
+      },
+      "datasource": "常稳环境数据源",
       "description": "",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
           },
           "custom": {
-            "align": "auto",
-            "displayMode": "auto",
-            "filterable": true
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "thresholds": {
@@ -1283,23 +1684,7 @@
             ]
           }
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "util_percent linux181189"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "light-red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 9,
@@ -1309,7 +1694,14 @@
       },
       "id": 12,
       "options": {
-        "showHeader": true
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
       },
       "pluginVersion": "8.2.3",
       "targets": [
@@ -1366,10 +1758,72 @@
               "type": "macro"
             }
           ]
+        },
+        {
+          "format": "time_series",
+          "group": [
+            {
+              "params": [
+                "$__interval",
+                "none"
+              ],
+              "type": "time"
+            },
+            {
+              "params": [
+                "hostname"
+              ],
+              "type": "column"
+            }
+          ],
+          "hide": true,
+          "metricColumn": "hostname",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  time,hostname,\n  counts AS \"count\"\nFROM\n  cluster2.host_zombie_count_t\nwhere\n  $__timeFilter(time)\nORDER BY 1 \nlimit 1000",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "cur_user"
+                ],
+                "type": "column"
+              },
+              {
+                "params": [
+                  "avg"
+                ],
+                "type": "aggregate"
+              },
+              {
+                "params": [
+                  "cur_user"
+                ],
+                "type": "alias"
+              }
+            ]
+          ],
+          "table": "dgg_fi_edw_gauss_hp.host_cpu_usage_t",
+          "timeColumn": "time",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "op": "gt",
+          "value": 5,
+          "visible": true
         }
       ],
       "title": "僵尸进程数量监控",
-      "type": "table"
+      "type": "timeseries"
     },
     {
       "datasource": "${CLUSTER}",
@@ -2023,7 +2477,7 @@
       "type": "table"
     }
   ],
-  "refresh": "1m",
+  "refresh": "",
   "schemaVersion": 31,
   "style": "dark",
   "tags": [],
@@ -2102,7 +2556,7 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
+          "selected": false,
           "text": "60s",
           "value": "60s"
         },
@@ -2188,12 +2642,12 @@
     ]
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-3h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "3.节点级OS系统资源监控",
   "uid": "9LmEP48nz",
-  "version": 35
+  "version": 68
 }

@@ -23,12 +23,48 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 37,
-  "iteration": 1657783759350,
+  "iteration": 1666334971536,
   "links": [],
   "liveNow": false,
   "panels": [
     {
-      "datasource": "${CLUSTER}",
+      "alert": {
+        "alertRuleTags": {},
+        "conditions": [
+          {
+            "evaluator": {
+              "params": [
+                90
+              ],
+              "type": "gt"
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": [
+                "B",
+                "5m",
+                "now"
+              ]
+            },
+            "reducer": {
+              "params": [],
+              "type": "max"
+            },
+            "type": "query"
+          }
+        ],
+        "executionErrorState": "alerting",
+        "for": "5m",
+        "frequency": "1m",
+        "handler": 1,
+        "message": "每隔1m检测1次cpu使用率（100-idle），如果最大值超过90%且持续5个周期，则触发告警",
+        "name": "CPU使用率 alert",
+        "noDataState": "ok",
+        "notifications": []
+      },
+      "datasource": "常稳环境数据源",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -128,13 +164,84 @@
               "type": "macro"
             }
           ]
+        },
+        {
+          "format": "time_series",
+          "group": [],
+          "hide": true,
+          "metricColumn": "none",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  time,hostname,(100-idle) as cpu\nFROM cluster2.host_cpu_usage_t\nwhere $__timeFilter(time)\nORDER BY time\nlimit 100000",
+          "refId": "B",
+          "select": [
+            [
+              {
+                "params": [
+                  "value"
+                ],
+                "type": "column"
+              }
+            ]
+          ],
+          "timeColumn": "time",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "op": "gt",
+          "value": 90,
+          "visible": true
         }
       ],
       "title": "CPU使用率",
       "type": "timeseries"
     },
     {
-      "datasource": "${CLUSTER}",
+      "alert": {
+        "alertRuleTags": {},
+        "conditions": [
+          {
+            "evaluator": {
+              "params": [
+                0.8
+              ],
+              "type": "gt"
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": [
+                "B",
+                "5m",
+                "now"
+              ]
+            },
+            "reducer": {
+              "params": [],
+              "type": "max"
+            },
+            "type": "query"
+          }
+        ],
+        "executionErrorState": "alerting",
+        "for": "5m",
+        "frequency": "1m",
+        "handler": 1,
+        "message": "每隔1m检测1次内存使用率(1-MemFree/MemTotal)，如果最大值超过80%且持续五个周期，则触发告警",
+        "name": "空闲MEM监控(GB) alert",
+        "noDataState": "ok",
+        "notifications": []
+      },
+      "datasource": "常稳环境数据源",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -187,7 +294,32 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "free linux181201"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 9,
@@ -234,6 +366,41 @@
               "type": "macro"
             }
           ]
+        },
+        {
+          "format": "time_series",
+          "group": [],
+          "hide": true,
+          "metricColumn": "none",
+          "rawQuery": true,
+          "rawSql": "select time,hostname,useage from(\r\nSELECT\r\n  time,\r\n  hostname,\r\n  sum(CASE WHEN key = 'MemFree' then VALUE::text else '0' END) as MemFree,\r\n  sum(CASE WHEN key = 'MemTotal' then VALUE::text else '0' END) as MemTotal,\r\n  (1-MemFree/MemTotal) useage\r\nFROM cluster2.host_memory_info_t\r\nwhere key in ('MemFree','MemTotal')\r\ngroup by 1,2\r\norder by 1 \r\nlimit 100000) where $__timeFilter(time);",
+          "refId": "B",
+          "select": [
+            [
+              {
+                "params": [
+                  "value"
+                ],
+                "type": "column"
+              }
+            ]
+          ],
+          "timeColumn": "time",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "op": "gt",
+          "value": 0.8,
+          "visible": true
         }
       ],
       "title": "空闲MEM监控(GB)",
@@ -510,6 +677,60 @@
           "rawQuery": true,
           "rawSql": "SELECT\n  $__timeGroupAlias(time,$SPAN),\n  hostname AS \"host\",\n  avg(await) AS \"await\"\nFROM\n$SCHEMA.host_io_stat_t\nWHERE\n  $__timeFilter(time) \nGROUP BY 1,2\nORDER BY 1",
           "refId": "B",
+          "select": [
+            [
+              {
+                "params": [
+                  "cur_user"
+                ],
+                "type": "column"
+              },
+              {
+                "params": [
+                  "avg"
+                ],
+                "type": "aggregate"
+              },
+              {
+                "params": [
+                  "cur_user"
+                ],
+                "type": "alias"
+              }
+            ]
+          ],
+          "table": "dgg_fi_edw_gauss_hp.host_cpu_usage_t",
+          "timeColumn": "time",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        },
+        {
+          "format": "time_series",
+          "group": [
+            {
+              "params": [
+                "$__interval",
+                "none"
+              ],
+              "type": "time"
+            },
+            {
+              "params": [
+                "hostname"
+              ],
+              "type": "column"
+            }
+          ],
+          "hide": false,
+          "metricColumn": "hostname",
+          "rawQuery": true,
+          "rawSql": "",
+          "refId": "A",
           "select": [
             [
               {
@@ -895,8 +1116,8 @@
         "allValue": null,
         "current": {
           "selected": true,
-          "text": "60s",
-          "value": "60s"
+          "text": "5m",
+          "value": "5m"
         },
         "description": null,
         "error": null,
@@ -917,12 +1138,12 @@
             "value": "30s"
           },
           {
-            "selected": true,
+            "selected": false,
             "text": "60s",
             "value": "60s"
           },
           {
-            "selected": false,
+            "selected": true,
             "text": "5m",
             "value": "5m"
           },
@@ -940,12 +1161,12 @@
     ]
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-3h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "2.集群级OS系统资源监控",
   "uid": "BGcKxjenz",
-  "version": 40
+  "version": 59
 }

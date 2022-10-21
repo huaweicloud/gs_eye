@@ -22,8 +22,8 @@
   "fiscalYearStartMonth": 0,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 7,
-  "iteration": 1657853012235,
+  "id": 39,
+  "iteration": 1666334411942,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -74,7 +74,43 @@
       "type": "text"
     },
     {
-      "datasource": "${CLUSTER}",
+      "alert": {
+        "alertRuleTags": {},
+        "conditions": [
+          {
+            "evaluator": {
+              "params": [
+                600
+              ],
+              "type": "gt"
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": [
+                "A",
+                "10m",
+                "now"
+              ]
+            },
+            "reducer": {
+              "params": [],
+              "type": "max"
+            },
+            "type": "query"
+          }
+        ],
+        "executionErrorState": "alerting",
+        "for": "5m",
+        "frequency": "1m",
+        "handler": 1,
+        "message": "每隔1m检测1次探针执行时间，如果最大值超过阈值（配置时间*2）且持续5个周期，则触发告警",
+        "name": "业务探针监控 alert",
+        "noDataState": "ok",
+        "notifications": []
+      },
+      "datasource": "常稳环境数据源",
       "description": "",
       "fieldConfig": {
         "defaults": {
@@ -169,7 +205,7 @@
           "hide": false,
           "metricColumn": "hostname",
           "rawQuery": true,
-          "rawSql": "SELECT\n  time,\n  --time-interval '8 hours' as \"time\",\n  --$__time(time) as \"time1\",\n  --$__timeGroupAlias(time,$__interval),\n  total_probe_time \nFROM $SCHEMA.database_probe_t\nWHERE\n  $__timeFilter(time) and hostname in ('$HOST_NAME')\ngroup BY 1,2\nORDER BY 1",
+          "rawSql": "SELECT\n  time,\n  total_probe_time\nFROM $SCHEMA.database_probe_t\nWHERE\n  $__timeFilter(time) and hostname in ('$HOST_NAME')\nORDER BY 1",
           "refId": "B",
           "select": [
             [
@@ -202,6 +238,68 @@
               "type": "macro"
             }
           ]
+        },
+        {
+          "format": "time_series",
+          "group": [
+            {
+              "params": [
+                "$__interval",
+                "none"
+              ],
+              "type": "time"
+            },
+            {
+              "params": [
+                "hostname"
+              ],
+              "type": "column"
+            }
+          ],
+          "hide": true,
+          "metricColumn": "hostname",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  time,hostname,total_probe_time\nFROM cluster2.database_probe_t\nwhere $__timeFilter(time) \nORDER BY 1\nlimit 100000",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "cur_user"
+                ],
+                "type": "column"
+              },
+              {
+                "params": [
+                  "avg"
+                ],
+                "type": "aggregate"
+              },
+              {
+                "params": [
+                  "cur_user"
+                ],
+                "type": "alias"
+              }
+            ]
+          ],
+          "table": "dgg_fi_edw_gauss_hp.host_cpu_usage_t",
+          "timeColumn": "time",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "critical",
+          "op": "gt",
+          "value": 600,
+          "visible": true
         }
       ],
       "title": "业务探针监控",
@@ -342,7 +440,7 @@
       "type": "timeseries"
     }
   ],
-  "refresh": "1m",
+  "refresh": "",
   "schemaVersion": 31,
   "style": "dark",
   "tags": [],
@@ -398,7 +496,7 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
+          "selected": false,
           "text": "linux181195",
           "value": "linux181195"
         },
@@ -429,5 +527,5 @@
   "timezone": "",
   "title": "1. 业务探针监控",
   "uid": "LFg8iJUnk",
-  "version": 33
+  "version": 60
 }
